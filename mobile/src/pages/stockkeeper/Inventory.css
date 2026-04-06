@@ -1,0 +1,262 @@
+.inventory-page {
+  padding-bottom: 20px;
+}
+
+/* --- Hero Section --- */
+.inv-hero {
+  background: linear-gradient(135deg, var(--slate-900) 0%, var(--slate-800) 100%);
+  color: white;
+  padding: 24px 16px 36px 16px;
+  border-bottom-left-radius: 20px;
+  border-bottom-right-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.inv-hero::after {
+  content: '';
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(242, 101, 34, 0.15) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.inv-hero-content {
+  position: relative;
+  z-index: 2;
+}
+
+.inv-title {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.3px;
+}
+
+.inv-sub-location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.7);
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+
+/* Stats Cards */
+.inv-stats-cards {
+  display: flex;
+  gap: 12px;
+}
+
+.inv-stat-card {
+  flex: 1;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: all 0.2s;
+}
+
+.inv-stat-card.alerting {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.inv-stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+}
+
+.inv-stat-icon.safe { background: rgba(242, 101, 34, 0.2); color: var(--primary); }
+.inv-stat-icon.warn { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+.inv-stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.inv-stat-val {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.inv-stat-lbl {
+  font-size: 10px;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+/* --- Body --- */
+.inv-body {
+  padding: 16px;
+  margin-top: -16px; /* Overlap with hero */
+  position: relative;
+  z-index: 3;
+}
+
+.inv-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 0;
+  color: var(--slate-500);
+  font-size: 14px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+
+.inv-section {
+  margin-bottom: 24px;
+}
+
+.inv-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--slate-800);
+  margin-bottom: 12px;
+  padding-left: 4px;
+}
+
+.inv-section-title.danger {
+  color: #ef4444;
+}
+
+.inv-empty {
+  background: white;
+  border-radius: 16px;
+  padding: 30px 20px;
+  text-align: center;
+  color: var(--slate-500);
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+  border: 1px dashed var(--slate-300);
+}
+
+.inv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* --- Cards --- */
+.inv-card {
+  background: white;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border: 1px solid var(--slate-200);
+}
+
+.inv-card-danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.1);
+}
+
+.inv-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px dashed var(--slate-200);
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+
+.inv-card-danger .inv-card-header {
+  border-bottom-color: #fca5a5;
+}
+
+.inv-code {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--slate-800);
+  letter-spacing: 0.5px;
+}
+
+.inv-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--slate-500);
+  background: var(--slate-100);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.inv-card-danger .inv-time {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.inv-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inv-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.inv-row.muted {
+  color: var(--slate-400);
+  font-size: 12px;
+}
+
+.inv-lbl {
+  color: var(--slate-500);
+  flex-shrink: 0;
+  width: 80px;
+}
+
+.inv-val {
+  font-weight: 500;
+  color: var(--slate-800);
+  text-align: right;
+  word-break: break-word;
+}
+
+.inv-val.highlight {
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.inv-val.flex-val {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}

@@ -1,0 +1,165 @@
+/* Layout Specific Styles - Enterprise Grade */
+.sidebar-logo {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+  color: var(--text-heading);
+}
+
+.sidebar-nav {
+  padding: 16px 12px; /* Thêm padding ngang để items có mép cách rạch ròi */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px; /* Gọn hơn form trước đây */
+  color: var(--slate-500);
+  transition: all var(--transition-speed);
+  border-radius: var(--border-radius-md); /* Bo gọn thành viên nang nút */
+  font-weight: 500;
+}
+
+.nav-item:hover {
+  background-color: var(--slate-100);
+  color: var(--slate-900);
+}
+
+.nav-item.active {
+  background-color: #fff3ec; /* Rất nhạt, highlight màu GHN */
+  color: var(--primary-color);
+}
+
+.nav-icon {
+  margin-right: 12px;
+  font-size: 1.15rem;
+}
+
+/* Header Styles */
+.header-search {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-app);
+  padding: 8px 16px;
+  border-radius: var(--border-radius-md);
+  width: 320px;
+  border: 1px solid transparent;
+  transition: border-color var(--transition-speed);
+}
+
+.header-search:focus-within {
+  border-color: var(--primary-color);
+  background-color: #fff;
+  box-shadow: var(--shadow-focus);
+}
+
+.header-search input {
+  border: none;
+  background: none;
+  outline: none;
+  margin-left: 8px;
+  width: 100%;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.header-search .search-icon {
+  color: var(--slate-500);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px; /* Gọn gàng hơn */
+}
+
+.icon-btn {
+  position: relative;
+  font-size: 1.25rem;
+  color: var(--slate-500);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover {
+  color: var(--slate-900);
+}
+
+.badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  background-color: #ef4444; /* Màu đỏ tiêu chuẩn */
+  color: white;
+  min-width: 16px;
+  height: 16px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-weight: 700;
+  border: 1.5px solid var(--bg-card); /* Viền cắt tạo lớp chồng */
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-left: 20px;
+  border-left: 1px solid var(--border-color);
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%; /* Tròn xoe cho Avatar cá nhân */
+  background-color: var(--slate-100);
+  color: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  border: 1px solid var(--slate-200);
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-heading);
+}
+
+.user-role {
+  font-size: 12px;
+  color: var(--slate-500);
+  margin-top: 2px;
+}
+
+.logout-btn {
+  color: var(--slate-500);
+  margin-left: 12px;
+  font-size: 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logout-btn:hover {
+  color: #ef4444;
+}

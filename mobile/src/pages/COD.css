@@ -1,0 +1,135 @@
+.cod-page { min-height: 100%; padding-bottom: 20px; }
+
+/* Header */
+.cod-header {
+  background: white;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--slate-100);
+}
+.cod-title { font-size: 17px; font-weight: 800; color: var(--slate-900); }
+.cod-sub { font-size: 12px; color: var(--slate-400); margin-top: 3px; }
+.cod-refresh-btn {
+  width: 34px; height: 34px;
+  background: var(--slate-100); border: none; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--slate-600); transition: all 0.2s;
+}
+.cod-refresh-btn:hover { background: var(--primary-light); color: var(--primary); }
+
+/* Total Card */
+.cod-total-card {
+  margin: 14px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  border-radius: 20px;
+  padding: 22px 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 8px 28px rgba(242, 101, 34, 0.4);
+  color: white;
+}
+.cod-total-icon {
+  width: 60px; height: 60px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.cod-total-label { font-size: 12px; color: rgba(255,255,255,0.7); font-weight: 500; }
+.cod-total-amount { font-size: 28px; font-weight: 900; letter-spacing: -1px; margin: 4px 0; }
+.cod-total-count { font-size: 12px; color: rgba(255,255,255,0.6); }
+
+/* Warning Box */
+.cod-warn-box {
+  margin: 0 14px 4px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #92400e;
+}
+
+/* Section title */
+.cod-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--slate-500);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 14px 16px 6px;
+}
+
+/* Orders list */
+.cod-order-list { display: flex; flex-direction: column; gap: 6px; padding: 0 14px; }
+.cod-order-row {
+  background: white;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+  border: 1px solid var(--slate-100);
+}
+.cod-order-left { display: flex; align-items: center; gap: 10px; }
+.cod-order-icon { width: 36px; height: 36px; background: var(--primary-light); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--primary); }
+.cod-order-code { font-size: 12px; font-weight: 800; color: var(--primary); font-family: monospace; }
+.cod-order-name { font-size: 12px; color: var(--slate-600); font-weight: 500; margin-top: 2px; }
+.cod-order-amount { font-size: 14px; font-weight: 800; color: #2e7d32; white-space: nowrap; }
+
+/* Sum row */
+.cod-sum-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 14px 0;
+  background: #f8fff8;
+  border: 1.5px solid #a7f3d0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--slate-700);
+}
+.cod-sum-row strong { font-size: 18px; font-weight: 900; color: #2e7d32; }
+
+/* Submit */
+.cod-submit-area { padding: 16px 14px 0; }
+.cod-submit-btn { font-size: 15px; padding: 14px; }
+.cod-submit-note { font-size: 11px; color: var(--slate-400); text-align: center; margin-top: 8px; font-weight: 500; }
+
+/* Success Screen */
+.cod-success-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100% - 20px);
+  gap: 12px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.cod-success-icon { width: 90px; height: 90px; background: #e8f5e9; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #2e7d32; }
+.cod-success-screen h3 { font-size: 20px; font-weight: 900; color: var(--slate-900); }
+.cod-success-screen p { font-size: 14px; color: var(--slate-600); line-height: 1.7; }
+.cod-success-screen strong { font-size: 22px; color: var(--primary); font-weight: 900; }
+.cod-success-note {
+  background: var(--info-bg);
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: #1e40af;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
+  max-width: 320px;
+}

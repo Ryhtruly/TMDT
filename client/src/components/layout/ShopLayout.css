@@ -1,0 +1,269 @@
+.shop-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--slate-50);
+}
+
+/* Sidebar */
+.shop-sidebar {
+  width: 240px;
+  background-color: #0b4a7d;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s;
+  box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+  overflow-y: auto;
+}
+
+.sidebar-logo {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: #083c66;
+}
+
+.sidebar-logo h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: white;
+  letter-spacing: -0.5px;
+}
+
+.sidebar-nav {
+  padding: 24px 16px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #cce0f5;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 14px;
+  margin-bottom: 4px;
+  transition: all 0.2s;
+}
+
+.nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.nav-item.active {
+  background-color: var(--primary-color);
+  color: white;
+  font-weight: 600;
+}
+
+.nav-icon {
+  font-size: 18px;
+}
+
+/* Main Content Area */
+.shop-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Topbar */
+.shop-topbar {
+  height: 64px;
+  background-color: white;
+  border-bottom: 1px solid var(--slate-200);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.sidebar-user {
+  padding: 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar-user .avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: white;
+  color: var(--primary-color);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+.sidebar-user .user-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.sidebar-user .user-role {
+  font-size: 13px;
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.credit-limit {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #cce0f5;
+  font-weight: 600;
+}
+
+.verify-card {
+  margin: 16px;
+  background: #083c66;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.verify-card p {
+  font-size: 12px;
+  color: white;
+  margin: 12px 0;
+  line-height: 1.5;
+}
+
+/* Topbar Update to Match GHN */
+.shop-topbar {
+  height: 60px;
+  background-color: white;
+  border-bottom: 1px solid var(--slate-200);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+}
+
+.global-search {
+  display: flex;
+  align-items: center;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: 20px;
+  padding: 6px 16px;
+  width: 400px;
+}
+
+.global-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  margin-left: 8px;
+  font-size: 14px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.store-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--slate-200);
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--slate-700);
+}
+
+.tag-btn {
+  background: var(--slate-800);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag-btn.orange {
+  background: var(--primary-color);
+}
+
+.btn-logout {
+  color: var(--slate-500);
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  padding: 8px;
+}
+
+.btn-logout:hover {
+  color: var(--danger);
+}
+
+/* Page Content */
+.shop-content {
+  flex: 1;
+  padding: 32px;
+  overflow-y: auto;
+}
+
+/* Enhancements */
+.search-shortcut {
+  font-size: 12px;
+  background-color: var(--slate-200);
+  color: var(--slate-600);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.btn-create-order {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 6px rgba(10, 88, 202, 0.2);
+  transition: all 0.2s;
+}
+
+.btn-create-order:hover {
+  background-color: #0b4a7d;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(10, 88, 202, 0.3);
+}

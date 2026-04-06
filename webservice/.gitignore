@@ -1,0 +1,12 @@
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+*.env
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+*.tsbuildinfo

@@ -1,0 +1,52 @@
+# === ENVIRONMENT FILES ===
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+*.env
+
+# === NODE MODULES ===
+node_modules/
+dist/
+build/
+
+# === LOGS ===
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# === OS FILES ===
+.DS_Store
+Thumbs.db
+
+# === EDITOR ===
+.vscode/settings.json
+.idea/
+
+# === TYPESCRIPT BUILD OUTPUT ===
+dist/
+*.tsbuildinfo
+
+# === EXPO (mobile-expo folder) ===
+mobile-expo/
+
+# === PYTHON (research files) ===
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# === TEMP / MISC ===
+*.docx
+*.txt
+task.md
+output_docs.txt
+verify_result.txt
+docx_structure.txt
+migrate_orders.js
+explore_docx.py
+read_docs.py
+modify_docx.py
+verify_docx.py
