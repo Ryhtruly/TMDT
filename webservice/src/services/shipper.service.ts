@@ -2,218 +2,297 @@ import { ShipperRepository } from '../repositories/shipper.repository';
 
 const shipperRepo = new ShipperRepository();
 
-// Phí giao lại từ lần 4 (theo Docx)
 const FREE_DELIVERY_LIMIT = 3;
 const REDELIVERY_FEE = 11000;
 
-// State Machine: Các bước chuyển trạng thái hợp lệ
-const VALID_TRANSITIONS: Record<string, string> = {
-  'CHỜ LẤY HÀNG': 'ĐÃ LẤY HÀNG',
-  'ĐÃ LẤY HÀNG':  'ĐANG GIAO',
-  'GIAO THẤT BẠI': 'ĐANG GIAO',       // Giao lại
-};
+const getReceiverFeeAmount = (order: any) =>
+  String(order.payer_type || 'SENDER').toUpperCase() === 'RECEIVER'
+    ? Number(order.shipping_fee || 0) + Number(order.insurance_fee || 0)
+    : 0;
 
 export class ShipperService {
-  // Lấy id_employee từ token user
   private async getEmployeeId(id_user: number) {
     const emp = await shipperRepo.findEmployeeByUserId(id_user);
-    if (!emp) throw new Error('Tài khoản này không có hồ sơ nhân viên. Liên hệ Admin!');
+    if (!emp) throw new Error('Tai khoan nay khong co ho so nhan vien. Lien he admin.');
     return emp.id_employee;
   }
 
-  // =============================================
-  // A. XEM DANH SÁCH ĐƠN CẦN LẤY HÀNG
-  // =============================================
-  async getPickupList(id_user: number) {
+  private async getSpokeAssignment(id_user: number) {
     const id_employee = await this.getEmployeeId(id_user);
     const assignment = await shipperRepo.getShipperAssignment(id_employee);
-    if (!assignment?.id_spoke) throw new Error('Bạn chưa được phân công khu vực giao hàng. Liên hệ Admin!');
+    if (!assignment?.id_spoke) {
+      throw new Error('Ban chua duoc phan cong khu vuc giao hang. Lien he admin.');
+    }
+    return assignment;
+  }
 
-    const orders = await shipperRepo.getOrdersToPickup(assignment.id_spoke);
+  async getPickupList(id_user: number) {
+    const assignment = await this.getSpokeAssignment(id_user);
+    const candidates = await shipperRepo.getPickupCandidates();
+
+    const orders = [];
+    for (const order of candidates) {
+      const originArea = await shipperRepo.resolveSpokeByAddress(order.pickup_address || '');
+      if (originArea?.id_spoke !== assignment.id_spoke) {
+        continue;
+      }
+
+      const assignedShipperId = await shipperRepo.resolveAssignedShipperByAddress(
+        assignment.id_spoke,
+        order.pickup_address || ''
+      );
+
+      if (!assignedShipperId || Number(assignedShipperId) === Number(id_user)) {
+        orders.push(order);
+      }
+    }
+
     return {
       assigned_spoke: assignment.spoke_name,
       total: orders.length,
-      orders
+      orders,
     };
   }
 
-  // =============================================
-  // B. XEM DANH SÁCH ĐƠN ĐANG MANG ĐI GIAO
-  // =============================================
   async getDeliveryList(id_user: number) {
-    const orders = await shipperRepo.getOrdersToDeliver(id_user);
-    return { total: orders.length, orders };
+    const assignment = await this.getSpokeAssignment(id_user);
+    const orders = await shipperRepo.getOrdersToDeliver(assignment.id_spoke, id_user);
+    return {
+      assigned_spoke: assignment.spoke_name,
+      total: orders.length,
+      orders,
+    };
   }
 
-  // =============================================
-  // C. QUÉT MÃ LẤY HÀNG (CHỜ LẤY HÀNG → ĐÃ LẤY HÀNG)
-  // =============================================
+  async getDashboardSummary(id_user: number) {
+    const [pickupData, deliveryData, codData, dayStats] = await Promise.all([
+      this.getPickupList(id_user),
+      this.getDeliveryList(id_user),
+      this.getCodSummary(id_user),
+      shipperRepo.getTodayDeliveryStats(id_user),
+    ]);
+
+    const activeDeliveries = deliveryData.orders.filter((order: any) =>
+      ['ĐÃ LẤY HÀNG', 'ĐANG GIAO'].includes(order.status)
+    );
+
+    return {
+      assigned_spoke: pickupData.assigned_spoke || deliveryData.assigned_spoke || 'Chua phan cong',
+      pickup_count: pickupData.orders.length,
+      delivery_count: activeDeliveries.length,
+      delivered_today: Number(dayStats.delivered_today || 0),
+      failed_today: Number(dayStats.failed_today || 0),
+      pending_cod: Number(codData.total_cash_held || 0),
+    };
+  }
+
   async confirmPickup(id_user: number, tracking_code: string) {
-    const order = await shipperRepo.findOrderByTracking(tracking_code);
-    if (!order) throw new Error(`Không tìm thấy đơn hàng: ${tracking_code}`);
-
-    // Kiểm tra ràng buộc State Machine
-    if (order.status !== 'CHỜ LẤY HÀNG') {
-      throw new Error(`Không thể lấy hàng! Đơn đang ở trạng thái "${order.status}". Chỉ có thể lấy khi đơn "CHỜ LẤY HÀNG".`);
-    }
-
-    const id_employee = await this.getEmployeeId(id_user);
-    const assignment = await shipperRepo.getShipperAssignment(id_employee);
-    const id_location = assignment?.id_spoke
-      ? await shipperRepo.getSpokeLocation(assignment.id_spoke)
-      : await shipperRepo.getFirstHubLocation();
-
+    const assignment = await this.getSpokeAssignment(id_user);
+    const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
     const client = await shipperRepo.getTxClient();
+
     try {
       await client.query('BEGIN');
+
+      const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
+      if (!order) throw new Error(`Khong tim thay don hang: ${tracking_code}`);
+      if (order.status === 'ĐÃ LẤY HÀNG' && order.latest_action === 'XUAT KHO -> GIAO CUOI') {
+        throw new Error('Don da san sang cho giao cuoi chang. Hay dung chuc nang "Bat dau giao".');
+      }
+      if (order.status !== 'CHỜ LẤY HÀNG') {
+        throw new Error(`Khong the lay hang. Don dang o trang thai "${order.status}".`);
+      }
+
+      const originArea = await shipperRepo.resolveSpokeByAddress(order.store_address || '');
+      if (!originArea || Number(originArea.id_spoke) !== Number(assignment.id_spoke)) {
+        throw new Error('Don nay khong thuoc khu vuc lay hang cua ban.');
+      }
+
+      const assignedShipperId = await shipperRepo.resolveAssignedShipperByAddress(
+        assignment.id_spoke,
+        order.store_address || ''
+      );
+      if (assignedShipperId && Number(assignedShipperId) !== Number(id_user)) {
+        throw new Error('Don nay da duoc he thong phan cho shipper khac trong khu vuc.');
+      }
+
       await shipperRepo.updateOrderStatus(order.id_order, 'ĐÃ LẤY HÀNG', client);
-      await shipperRepo.insertOrderLog(order.id_order, id_location, id_user, 'LẤY HÀNG THÀNH CÔNG', null, client);
+      await shipperRepo.updateCurrentShipper(order.id_order, null, client);
+      await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'LAY HANG THANH CONG', null, client);
+
       await client.query('COMMIT');
 
       return {
         tracking_code,
         status: 'ĐÃ LẤY HÀNG',
-        message: 'Xác nhận lấy hàng thành công! Đơn đã chuyển sang trạng thái ĐÃ LẤY HÀNG.'
+        message: 'Xac nhan lay hang thanh cong.',
       };
-    } catch (e) {
+    } catch (error) {
       await client.query('ROLLBACK');
-      throw e;
+      throw error;
     } finally {
       client.release();
     }
   }
 
-  // =============================================
-  // D. BẮT ĐẦU ĐI GIAO (ĐÃ LẤY HÀNG → ĐANG GIAO)
-  // =============================================
   async startDelivery(id_user: number, tracking_code: string) {
-    const order = await shipperRepo.findOrderByTracking(tracking_code);
-    if (!order) throw new Error(`Không tìm thấy đơn: ${tracking_code}`);
-
-    if (!['ĐÃ LẤY HÀNG', 'GIAO THẤT BẠI'].includes(order.status)) {
-      throw new Error(`Đơn đang ở trạng thái "${order.status}", không thể bắt đầu giao.`);
-    }
-
-    const id_employee = await this.getEmployeeId(id_user);
-    const assignment = await shipperRepo.getShipperAssignment(id_employee);
-    const id_location = assignment?.id_spoke
-      ? await shipperRepo.getSpokeLocation(assignment.id_spoke)
-      : await shipperRepo.getFirstHubLocation();
-
+    const assignment = await this.getSpokeAssignment(id_user);
+    const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
     const client = await shipperRepo.getTxClient();
+
     try {
       await client.query('BEGIN');
+
+      const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
+      if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
+      if (!['ĐÃ LẤY HÀNG', 'GIAO THẤT BẠI'].includes(order.status)) {
+        throw new Error(`Don dang o trang thai "${order.status}", khong the bat dau giao.`);
+      }
+      if (order.status === 'ĐÃ LẤY HÀNG' && order.latest_action !== 'XUAT KHO -> GIAO CUOI') {
+        throw new Error('Don chua duoc ban giao cho shipper giao cuoi chang.');
+      }
+      if (Number(order.dest_spoke || 0) !== Number(assignment.id_spoke)) {
+        throw new Error('Don nay khong thuoc khu vuc giao hang cua ban.');
+      }
+      if (order.current_shipper_id && Number(order.current_shipper_id) !== Number(id_user)) {
+        throw new Error('Don nay dang duoc shipper khac xu ly.');
+      }
+
+      await shipperRepo.updateCurrentShipper(order.id_order, id_user, client);
       await shipperRepo.updateOrderStatus(order.id_order, 'ĐANG GIAO', client);
-      await shipperRepo.insertOrderLog(order.id_order, id_location, id_user, 'BẮT ĐẦU GIAO HÀNG', null, client);
+      await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'BAT DAU GIAO HANG', null, client);
+
       await client.query('COMMIT');
 
-      return { tracking_code, status: 'ĐANG GIAO', message: 'Đơn đang trên đường giao!' };
-    } catch (e) {
+      return {
+        tracking_code,
+        status: 'ĐANG GIAO',
+        message: 'Don dang tren duong giao.',
+      };
+    } catch (error) {
       await client.query('ROLLBACK');
-      throw e;
+      throw error;
     } finally {
       client.release();
     }
   }
 
-  // =============================================
-  // E. GIAO HÀNG THÀNH CÔNG (ĐANG GIAO → GIAO THÀNH CÔNG)
-  //    Ràng buộc: Phải qua bước ĐÃ LẤY HÀNG trước
-  // =============================================
   async confirmDelivered(id_user: number, tracking_code: string, evidence_url?: string) {
-    const order = await shipperRepo.findOrderByTracking(tracking_code);
-    if (!order) throw new Error(`Không tìm thấy đơn: ${tracking_code}`);
-
-    // Ràng buộc chặt từ Docx
-    if (order.status !== 'ĐANG GIAO') {
-      throw new Error(`Không thể xác nhận giao thành công! Đơn đang ở trạng thái "${order.status}". Phải đang ở trạng thái "ĐANG GIAO".`);
-    }
-
-    const attempt_count = await shipperRepo.countDeliveryAttempts(order.id_order);
-    const id_employee = await this.getEmployeeId(id_user);
-    const assignment = await shipperRepo.getShipperAssignment(id_employee);
-    const id_location = assignment?.id_spoke
-      ? await shipperRepo.getSpokeLocation(assignment.id_spoke)
-      : await shipperRepo.getFirstHubLocation();
-
+    const assignment = await this.getSpokeAssignment(id_user);
+    const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
     const client = await shipperRepo.getTxClient();
+
     try {
       await client.query('BEGIN');
 
-      // Ghi lần giao thành công
+      const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
+      if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
+      if (order.status !== 'ĐANG GIAO') {
+        throw new Error(`Khong the xac nhan giao thanh cong. Don dang o trang thai "${order.status}".`);
+      }
+      if (Number(order.current_shipper_id || 0) !== Number(id_user)) {
+        throw new Error('Don nay khong nam trong danh sach dang giao cua ban.');
+      }
+
+      const attemptCount = await shipperRepo.countDeliveryAttempts(order.id_order);
+      const receiverFeeAmount = getReceiverFeeAmount(order);
+      const codAmount = Number(order.cod_amount || 0);
+      const totalCashCollected = codAmount + receiverFeeAmount;
+
       await shipperRepo.insertDeliveryAttempt(
-        order.id_order, attempt_count + 1, id_user,
-        'THÀNH CÔNG', null, evidence_url || null, client
+        order.id_order,
+        attemptCount + 1,
+        id_user,
+        'THÀNH CÔNG',
+        null,
+        evidence_url || null,
+        client
       );
       await shipperRepo.updateOrderStatus(order.id_order, 'GIAO THÀNH CÔNG', client);
+      await shipperRepo.updateCurrentShipper(order.id_order, id_user, client);
       await shipperRepo.insertOrderLog(
-        order.id_order, id_location, id_user,
-        'GIAO HÀNG THÀNH CÔNG', evidence_url || null, client
+        order.id_order,
+        idLocation,
+        id_user,
+        'GIAO HANG THANH CONG',
+        evidence_url || null,
+        client
       );
 
       await client.query('COMMIT');
+
+      const parts = [];
+      if (codAmount > 0) parts.push(`COD ${codAmount.toLocaleString()}d`);
+      if (receiverFeeAmount > 0) parts.push(`phi nguoi nhan tra ${receiverFeeAmount.toLocaleString()}d`);
+      const cashNote = totalCashCollected > 0 ? ` Shipper dang giu ${parts.join(' + ')}.` : '';
+
       return {
         tracking_code,
         status: 'GIAO THÀNH CÔNG',
-        message: 'Xác nhận giao hàng thành công! COD sẽ được đối soát vào phiên gần nhất.'
+        collected_cod: codAmount,
+        collected_receiver_fee: receiverFeeAmount,
+        total_cash_collected: totalCashCollected,
+        payer_type: String(order.payer_type || 'SENDER').toUpperCase(),
+        message: `Xac nhan giao hang thanh cong.${cashNote}`,
       };
-    } catch (e) {
+    } catch (error) {
       await client.query('ROLLBACK');
-      throw e;
+      throw error;
     } finally {
       client.release();
     }
   }
 
-  // =============================================
-  // F. GIAO HÀNG THẤT BẠI (ĐANG GIAO → GIAO THẤT BẠI)
-  //    - Miễn phí 3 lần đầu
-  //    - Từ lần 4: Thu thêm 11.000đ/lần từ ví Shop
-  // =============================================
   async reportFailedDelivery(id_user: number, tracking_code: string, reason_fail: string, evidence_url?: string) {
-    if (!reason_fail) throw new Error('Bắt buộc nhập lý do giao hàng thất bại.');
+    if (!reason_fail) throw new Error('Bat buoc nhap ly do giao hang that bai.');
 
-    const order = await shipperRepo.findOrderByTracking(tracking_code);
-    if (!order) throw new Error(`Không tìm thấy đơn: ${tracking_code}`);
-
-    if (order.status !== 'ĐANG GIAO') {
-      throw new Error(`Chỉ có thể báo thất bại khi đơn đang ở trạng thái "ĐANG GIAO". Hiện tại: "${order.status}".`);
-    }
-
-    const attempt_count = await shipperRepo.countDeliveryAttempts(order.id_order);
-    const new_attempt_no = attempt_count + 1;
-    const is_chargeable = new_attempt_no > FREE_DELIVERY_LIMIT; // Lần 4 trở đi = tính tiền
-
-    const id_employee = await this.getEmployeeId(id_user);
-    const assignment = await shipperRepo.getShipperAssignment(id_employee);
-    const id_location = assignment?.id_spoke
-      ? await shipperRepo.getSpokeLocation(assignment.id_spoke)
-      : await shipperRepo.getFirstHubLocation();
-
+    const assignment = await this.getSpokeAssignment(id_user);
+    const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
     const client = await shipperRepo.getTxClient();
+
     try {
       await client.query('BEGIN');
 
-      // Ghi lần thất bại
+      const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
+      if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
+      if (order.status !== 'ĐANG GIAO') {
+        throw new Error(`Chi co the bao that bai khi don dang o trang thai "ĐANG GIAO". Hien tai: "${order.status}".`);
+      }
+      if (Number(order.current_shipper_id || 0) !== Number(id_user)) {
+        throw new Error('Don nay khong nam trong danh sach dang giao cua ban.');
+      }
+
+      const attemptCount = await shipperRepo.countDeliveryAttempts(order.id_order);
+      const newAttemptNo = attemptCount + 1;
+      const isChargeable = newAttemptNo > FREE_DELIVERY_LIMIT;
+
       await shipperRepo.insertDeliveryAttempt(
-        order.id_order, new_attempt_no, id_user,
-        'THẤT BẠI', reason_fail, evidence_url || null, client
+        order.id_order,
+        newAttemptNo,
+        id_user,
+        'THẤT BẠI',
+        reason_fail,
+        evidence_url || null,
+        client
       );
 
-      // Thu phí giao lại từ lần 4
-      let redelivery_fee_charged = 0;
-      if (is_chargeable) {
+      let redeliveryFeeCharged = 0;
+      if (isChargeable) {
         const shopWallet = await shipperRepo.findWalletByShopOrder(order.id_order, client);
         if (shopWallet) {
-          redelivery_fee_charged = await shipperRepo.chargeRedeliveryFee(shopWallet.id_wallet, client);
+          redeliveryFeeCharged = await shipperRepo.chargeRedeliveryFee(shopWallet.id_wallet, client);
         }
       }
 
       await shipperRepo.updateOrderStatus(order.id_order, 'GIAO THẤT BẠI', client);
+      await shipperRepo.updateCurrentShipper(order.id_order, null, client);
       await shipperRepo.insertOrderLog(
-        order.id_order, id_location, id_user,
-        `GIAO THẤT BẠI LẦN ${new_attempt_no}: ${reason_fail}`,
-        evidence_url || null, client
+        order.id_order,
+        idLocation,
+        id_user,
+        `GIAO THAT BAI LAN ${newAttemptNo}`,
+        evidence_url || null,
+        client
       );
 
       await client.query('COMMIT');
@@ -221,44 +300,105 @@ export class ShipperService {
       return {
         tracking_code,
         status: 'GIAO THẤT BẠI',
-        attempt_no: new_attempt_no,
-        ...(is_chargeable && { redelivery_fee_charged, fee_note: `Lần giao thứ ${new_attempt_no} > 3 lần miễn phí — đã thu phí giao lại ${REDELIVERY_FEE.toLocaleString()}đ từ ví Shop.` }),
-        message: `Ghi nhận giao thất bại lần ${new_attempt_no}. ${is_chargeable ? `Phí giao lại ${REDELIVERY_FEE.toLocaleString()}đ đã được trừ vào ví Shop.` : `Còn ${FREE_DELIVERY_LIMIT - new_attempt_no} lần giao miễn phí.`}`
+        attempt_no: newAttemptNo,
+        redelivery_fee_charged: redeliveryFeeCharged,
+        message: isChargeable
+          ? `Ghi nhan giao that bai lan ${newAttemptNo}. Da tru ${REDELIVERY_FEE.toLocaleString()}d phi giao lai vao vi shop.`
+          : `Ghi nhan giao that bai lan ${newAttemptNo}.`,
       };
-    } catch (e) {
+    } catch (error) {
       await client.query('ROLLBACK');
-      throw e;
+      throw error;
     } finally {
       client.release();
     }
   }
 
-  // =============================================
-  // G. COD SUMMARY: Tổng COD hôm nay
-  // =============================================
-  async getCodSummary(id_user: number, date?: string) {
-    const orders = await shipperRepo.getCodSummaryByUser(id_user, date);
-    const totalCod = orders.reduce((sum: number, o: any) => sum + Number(o.cod_amount || 0), 0);
+  async getCodSummary(id_user: number) {
+    const orders = await shipperRepo.getPendingCashOrdersByUser(id_user);
+    const totalCod = orders.reduce((sum: number, order: any) => sum + Number(order.cod_amount || 0), 0);
+    const totalReceiverFee = orders.reduce((sum: number, order: any) => sum + Number(order.receiver_fee_amount || 0), 0);
+    const totalCashHeld = orders.reduce((sum: number, order: any) => sum + Number(order.cash_to_remit || 0), 0);
+    const reconciliations = await shipperRepo.getRecentCodReconciliations(id_user);
+
     return {
-      date: date || new Date().toISOString().slice(0, 10),
-      total_cod: totalCod,
       order_count: orders.length,
+      total_cod: totalCod,
+      total_receiver_fee: totalReceiverFee,
+      total_cash_held: totalCashHeld,
       orders,
+      recent_reconciliations: reconciliations,
     };
   }
 
-  // =============================================
-  // H. INCOME: Thu nhập tháng hiện tại
-  // =============================================
+  async submitCodReconciliation(id_user: number) {
+    const assignment = await this.getSpokeAssignment(id_user);
+    const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
+
+    const pendingOrders = await shipperRepo.getPendingCashOrdersByUser(id_user);
+    if (pendingOrders.length === 0) {
+      throw new Error('Khong co khoan tien nao can doi soat.');
+    }
+
+    const totalCod = pendingOrders.reduce((sum: number, order: any) => sum + Number(order.cod_amount || 0), 0);
+    const totalReceiverFee = pendingOrders.reduce(
+      (sum: number, order: any) => sum + Number(order.receiver_fee_amount || 0),
+      0
+    );
+    const totalCash = pendingOrders.reduce((sum: number, order: any) => sum + Number(order.cash_to_remit || 0), 0);
+    const orderIds = pendingOrders.map((order: any) => Number(order.id_order));
+
+    const client = await shipperRepo.getTxClient();
+    try {
+      await client.query('BEGIN');
+
+      const reconciliation = await shipperRepo.createCodReconciliation(
+        {
+          id_shipper: id_user,
+          total_cod: totalCod,
+          total_receiver_fee: totalReceiverFee,
+          total_cash: totalCash,
+          order_count: pendingOrders.length,
+        },
+        client
+      );
+
+      await shipperRepo.markOrdersReconciled(orderIds, reconciliation.id_reconciliation, client);
+
+      for (const order of pendingOrders) {
+        await shipperRepo.insertOrderLog(
+          order.id_order,
+          idLocation,
+          id_user,
+          `SHIPPER NOP TIEN #${reconciliation.id_reconciliation}`,
+          null,
+          client
+        );
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        reconciliation_id: reconciliation.id_reconciliation,
+        order_count: pendingOrders.length,
+        total_cod: totalCod,
+        total_receiver_fee: totalReceiverFee,
+        total_cash: totalCash,
+        message: `Da ghi nhan nop ${totalCash.toLocaleString()}d ve buu cuc.`,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async getIncome(id_user: number) {
     return await shipperRepo.getIncomeCurrentMonth(id_user);
   }
 
-  // =============================================
-  // I. INCOME HISTORY: Lịch sử lương 6 tháng
-  // =============================================
   async getIncomeHistory(id_user: number) {
     return await shipperRepo.getIncomeHistory(id_user);
   }
 }
-

@@ -54,8 +54,8 @@ const Routes = () => {
     setExpandedId(route.id_route);
     setLoadingDetail(true);
     try {
-      const res = await apiClient.get(`/routes/${route.id_route}`);
-      setStopDetail(res?.stops || res?.data?.stops || []);
+      const res: any = await apiClient.get(`/routes/${route.id_route}`);
+      setStopDetail(res?.stops || []);
     } catch (err) {
       console.error(err);
       setStopDetail([]);

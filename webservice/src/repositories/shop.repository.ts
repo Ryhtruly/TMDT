@@ -1,4 +1,5 @@
 import { pool } from '../config/db';
+import { isSameArea } from '../utils/location';
 
 export class ShopRepository {
   // Tìm user theo SĐT (dùng validate đăng ký trùng)
@@ -64,6 +65,21 @@ export class ShopRepository {
       [id_shop]
     );
     return result.rows;
+  }
+
+  async getAllSpokes() {
+    const result = await pool.query(`
+      SELECT s.id_spoke, s.spoke_name, l.address
+      FROM spokes s
+      JOIN locations l ON s.id_location = l.id_location
+      ORDER BY s.id_spoke ASC
+    `);
+    return result.rows;
+  }
+
+  async findAreaByProvinceDistrict(province: string, district: string) {
+    const result = await pool.query('SELECT * FROM areas ORDER BY id_area ASC');
+    return result.rows.find((row) => isSameArea(row.province, row.district, province, district)) || null;
   }
 
   async createStore(id_shop: number, store_name: string, phone: string, address: string, description: string, client: any) {

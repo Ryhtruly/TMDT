@@ -1,10 +1,14 @@
 import { OrderRepository } from '../repositories/order.repository';
 import { ShopRepository } from '../repositories/shop.repository';
+import { getRegionByProvince, normalizeProvinceName } from '../utils/location';
 
 const orderRepo = new OrderRepository();
 const shopRepo = new ShopRepository();
 
-// Tạo mã tracking chuẩn GHN format: QLKV + timestamp + random
+type PayerType = 'SENDER' | 'RECEIVER';
+type OperationalRouteType = 'DIRECT' | 'INTRA_HUB' | 'INTER_HUB';
+type PricingRouteType = 'Noi tinh' | 'Lien vung' | 'Xuyen mien';
+
 const generateTrackingCode = (): string => {
   const prefix = 'QLKV';
   const ts = Date.now().toString().slice(-7);
@@ -12,198 +16,313 @@ const generateTrackingCode = (): string => {
   return `${prefix}${ts}${rand}`;
 };
 
-// Tính cân nặng quy đổi theo khối (volumetric weight) - chuẩn GHN: D*R*C / 6000
-const calcVolumetricWeight = (length: number, width: number, height: number): number => {
-  return Math.ceil((length * width * height) / 6000);
-};
+const calcVolumetricWeight = (length: number, width: number, height: number): number =>
+  Math.ceil((length * width * height) / 6000);
 
-// Tính phí bảo hiểm theo Docx
 const INSURANCE_THRESHOLD = 1_000_000;
 const INSURANCE_RATE = 0.005;
-const calcInsuranceFee = (item_value: number): number => {
-  return item_value > INSURANCE_THRESHOLD ? Math.round(item_value * INSURANCE_RATE) : 0;
+
+const calcInsuranceFee = (itemValue: number): number =>
+  itemValue > INSURANCE_THRESHOLD ? Math.round(itemValue * INSURANCE_RATE) : 0;
+
+const normalizePayerType = (value: unknown): PayerType =>
+  String(value || 'SENDER').toUpperCase() === 'RECEIVER' ? 'RECEIVER' : 'SENDER';
+
+const resolveOperationalRouteType = (originArea: any, destArea: any): OperationalRouteType => {
+  if (originArea.id_spoke === destArea.id_spoke) return 'DIRECT';
+  if (originArea.parent_hub_id === destArea.parent_hub_id) return 'INTRA_HUB';
+  return 'INTER_HUB';
+};
+
+const resolvePricingRouteType = (originArea: any, destArea: any): PricingRouteType => {
+  if (normalizeProvinceName(originArea.province) === normalizeProvinceName(destArea.province)) {
+    return 'Noi tinh';
+  }
+
+  const originRegion = getRegionByProvince(originArea.province);
+  const destRegion = getRegionByProvince(destArea.province);
+
+  if (originRegion !== 'unknown' && originRegion === destRegion) {
+    return 'Lien vung';
+  }
+
+  if (originArea.parent_hub_id === destArea.parent_hub_id) {
+    return 'Lien vung';
+  }
+
+  return 'Xuyen mien';
+};
+
+const mapPricingRouteTypeForDb = (routeType: PricingRouteType) => {
+  switch (routeType) {
+    case 'Noi tinh':
+      return 'Nội tỉnh';
+    case 'Lien vung':
+      return 'Liên Vùng';
+    default:
+      return 'Xuyên Miền';
+  }
+};
+
+const buildPaymentFlow = (payerType: PayerType, totalFee: number, codAmount: number, walletAvailable: number) => {
+  const senderChargeNow = payerType === 'SENDER' ? totalFee : 0;
+  const receiverFeeOnDelivery = payerType === 'RECEIVER' ? totalFee : 0;
+  const cashToCollectOnDelivery = codAmount + receiverFeeOnDelivery;
+
+  return {
+    payer_type: payerType,
+    sender_charge_now: senderChargeNow,
+    receiver_fee_on_delivery: receiverFeeOnDelivery,
+    cash_to_collect_on_delivery: cashToCollectOnDelivery,
+    wallet_check: {
+      available_balance: walletAvailable,
+      is_sufficient: payerType === 'RECEIVER' ? true : walletAvailable >= totalFee,
+      warning:
+        payerType === 'RECEIVER'
+          ? `Shop khong bi tru vi luc tao don. Shipper can thu ${cashToCollectOnDelivery.toLocaleString()}d khi giao.`
+          : walletAvailable < totalFee
+            ? `So du vi khong du. Can nap them it nhat ${(totalFee - walletAvailable).toLocaleString()}d`
+            : 'So du du de tao don',
+    },
+  };
 };
 
 export class OrderService {
-  // =============================================
-  // A. XEM CÁC LOẠI DỊCH VỤ (Để Shop chọn)
-  // =============================================
   async getServiceTypes() {
     return await orderRepo.getAllServiceTypes();
   }
 
-  // =============================================
-  // B. TÍNH PHÍ TRƯỚC KHI TẠO ĐƠN (Preview - Giống GHN)
-  // =============================================
-  async previewFee(input: any, id_user: number) {
-    const { id_store, id_dest_area, weight, item_value = 0, id_service_type, length = 0, width = 0, height = 0 } = input;
+  async previewFee(input: any, idUser: number) {
+    const {
+      id_store,
+      id_dest_area,
+      weight,
+      item_value = 0,
+      cod_amount = 0,
+      id_service_type,
+      payer_type = 'SENDER',
+      length = 0,
+      width = 0,
+      height = 0,
+    } = input;
 
     if (!id_store || !id_dest_area || !weight) {
-      throw new Error('Cần cung cấp: id_store, id_dest_area, weight để tính phí.');
+      throw new Error('Can cung cap id_store, id_dest_area va weight de tinh phi.');
     }
 
-    // Xác thực Store thuộc Shop đang đăng nhập
-    const shop = await shopRepo.findShopByUserId(id_user);
-    if (!shop) throw new Error('Không tìm thấy thông tin Shop.');
+    const shop = await shopRepo.findShopByUserId(idUser);
+    if (!shop) throw new Error('Khong tim thay thong tin shop.');
 
     const store = await orderRepo.findStoreByIdAndShop(id_store, shop.id_shop);
-    if (!store) throw new Error('Kho hàng không tồn tại hoặc không thuộc Shop của bạn.');
+    if (!store) throw new Error('Kho hang khong ton tai hoac khong thuoc shop cua ban.');
 
-    // Lấy vùng đích
     const destArea = await orderRepo.findAreaById(id_dest_area);
-    if (!destArea) throw new Error('Khu vực giao hàng không hợp lệ.');
+    if (!destArea) throw new Error('Khu vuc giao hang khong hop le.');
 
-    // Tính cân nặng thực tế (lấy giá trị lớn hơn giữa cân thực và cân thể tích)
-    const volumetric = calcVolumetricWeight(length, width, height);
-    const billable_weight = Math.max(weight, volumetric);
-
-    // Tìm bảng giá phù hợp
-    const pricingRule = await orderRepo.findBestPricingRule(destArea.area_type, billable_weight);
-    const base_fee = pricingRule ? Number(pricingRule.price) : 35000;
-
-    // Nhân hệ số loại dịch vụ (Express = x1.5, Standard = x1.0...)
-    let service_multiplier = 1.0;
-    if (id_service_type) {
-      const svcType = await orderRepo.findServiceType(id_service_type);
-      if (svcType) service_multiplier = Number(svcType.base_multiplier);
+    const originArea = await orderRepo.findOriginAreaByStore(id_store);
+    if (!originArea) {
+      throw new Error('Kho gui hang chua map duoc voi spoke phat hang.');
     }
 
-    const shipping_fee = Math.round(base_fee * service_multiplier);
-    const insurance_fee = calcInsuranceFee(item_value);
-    const total_fee = shipping_fee + insurance_fee;
+    const volumetric = calcVolumetricWeight(length, width, height);
+    const billableWeight = Math.max(weight, volumetric);
+    const operationalRouteType = resolveOperationalRouteType(originArea, destArea);
+    const pricingRouteType = resolvePricingRouteType(originArea, destArea);
 
-    // Kiểm tra số dư ví (để báo trước cho Shop biết có đủ không)
-    const wallet = await shopRepo.getWalletByUserId(id_user);
-    const available = wallet ? (Number(wallet.balance) + Number(wallet.credit_limit) - Number(wallet.used_credit)) : 0;
+    const pricingRule = await orderRepo.findBestPricingRule(
+      mapPricingRouteTypeForDb(pricingRouteType),
+      destArea.area_type,
+      billableWeight
+    );
+    const baseFee = pricingRule ? Number(pricingRule.price) : 35000;
+
+    let serviceMultiplier = 1.0;
+    let serviceName = 'Tieu chuan';
+    if (id_service_type) {
+      const serviceType = await orderRepo.findServiceType(id_service_type);
+      if (serviceType) {
+        serviceMultiplier = Number(serviceType.base_multiplier);
+        serviceName = serviceType.service_name;
+      }
+    }
+
+    const shippingFee = Math.round(baseFee * serviceMultiplier);
+    const insuranceFee = calcInsuranceFee(item_value);
+    const totalFee = shippingFee + insuranceFee;
+    const normalizedPayerType = normalizePayerType(payer_type);
+
+    const wallet = await shopRepo.getWalletByUserId(idUser);
+    const available = wallet ? Number(wallet.balance) + Number(wallet.credit_limit) - Number(wallet.used_credit) : 0;
+    const paymentFlow = buildPaymentFlow(normalizedPayerType, totalFee, Number(cod_amount || 0), available);
 
     return {
       pickup_store: store.store_name,
+      origin_province: originArea.province,
+      origin_district: originArea.district,
       dest_province: destArea.province,
       dest_district: destArea.district,
       area_type: destArea.area_type,
-      billable_weight,
-      note_weight: volumetric > weight ? `Cân quy đổi (${volumetric}g) lớn hơn cân thực (${weight}g), tính theo cân quy đổi.` : `Tính theo cân thực: ${weight}g`,
+      operational_route_type: operationalRouteType,
+      pricing_route_type: pricingRule?.route_type || mapPricingRouteTypeForDb(pricingRouteType),
+      service_name: serviceName,
+      billable_weight: billableWeight,
+      note_weight:
+        volumetric > weight
+          ? `Can quy doi (${volumetric}g) lon hon can thuc (${weight}g), tinh theo can quy doi.`
+          : `Tinh theo can thuc: ${weight}g`,
       fee_breakdown: {
-        base_shipping_fee: base_fee,
-        service_multiplier: `x${service_multiplier}`,
-        shipping_fee,
-        insurance_fee,
-        insurance_note: insurance_fee > 0 ? `Hàng giá trị ${Number(item_value).toLocaleString()}đ > 1tr, tự động phí BH 0.5%` : 'Không phát sinh phí bảo hiểm',
-        total_fee
+        base_shipping_fee: baseFee,
+        service_multiplier: serviceMultiplier,
+        shipping_fee: shippingFee,
+        insurance_fee: insuranceFee,
+        total_fee: totalFee,
       },
-      wallet_check: {
-        available_balance: available,
-        is_sufficient: available >= total_fee,
-        warning: available < total_fee ? `⚠️ Số dư ví không đủ! Cần nạp thêm ít nhất ${(total_fee - available).toLocaleString()}đ` : '✅ Số dư đủ để tạo đơn'
-      }
+      payment_flow: paymentFlow,
+      wallet_check: paymentFlow.wallet_check,
     };
   }
 
-  // =============================================
-  // C. TẠO ĐƠN HÀNG CHÍNH THỨC (Trừ tiền ví)
-  // =============================================
-  async createOrder(input: any, id_user: number) {
+  async createOrder(input: any, idUser: number) {
     const {
-      id_store, id_service_type,
-      receiver_name, receiver_phone, receiver_address, id_dest_area,
-      weight, item_value = 0, cod_amount = 0, note = '',
-      length = 0, width = 0, height = 0
+      id_store,
+      id_service_type,
+      receiver_name,
+      receiver_phone,
+      receiver_address,
+      id_dest_area,
+      payer_type = 'SENDER',
+      weight,
+      item_value = 0,
+      cod_amount = 0,
+      note = '',
+      length = 0,
+      width = 0,
+      height = 0,
+      pickup_shift = null,
+      dropoff_spoke_id = null,
     } = input;
 
     if (!id_store || !receiver_name || !receiver_phone || !receiver_address || !id_dest_area || !weight) {
-      throw new Error('Thiếu thông tin bắt buộc: id_store, receiver_name, receiver_phone, receiver_address, id_dest_area, weight.');
+      throw new Error('Thieu thong tin bat buoc: id_store, receiver_name, receiver_phone, receiver_address, id_dest_area, weight.');
     }
 
-    // Validate
-    const shop = await shopRepo.findShopByUserId(id_user);
-    if (!shop) throw new Error('Không tìm thấy thông tin Shop.');
+    const shop = await shopRepo.findShopByUserId(idUser);
+    if (!shop) throw new Error('Khong tim thay thong tin shop.');
 
     const store = await orderRepo.findStoreByIdAndShop(id_store, shop.id_shop);
-    if (!store) throw new Error('Kho hàng không thuộc Shop của bạn.');
+    if (!store) throw new Error('Kho hang khong thuoc shop cua ban.');
 
     const destArea = await orderRepo.findAreaById(id_dest_area);
-    if (!destArea) throw new Error('Khu vực giao hàng không hợp lệ.');
+    if (!destArea) throw new Error('Khu vuc giao hang khong hop le.');
 
-    // Tính phí
-    const volumetric = calcVolumetricWeight(length, width, height);
-    const billable_weight = Math.max(weight, volumetric);
-    const pricingRule = await orderRepo.findBestPricingRule(destArea.area_type, billable_weight);
-    const base_fee = pricingRule ? Number(pricingRule.price) : 35000;
-
-    let service_multiplier = 1.0;
-    if (id_service_type) {
-      const svcType = await orderRepo.findServiceType(id_service_type);
-      if (svcType) service_multiplier = Number(svcType.base_multiplier);
+    const originArea = await orderRepo.findOriginAreaByStore(id_store);
+    if (!originArea) {
+      throw new Error('Kho gui hang chua map duoc voi spoke phat hang.');
     }
 
-    const shipping_fee = Math.round(base_fee * service_multiplier);
-    const insurance_fee = calcInsuranceFee(item_value);
-    const total_fee = shipping_fee + insurance_fee;
+    const volumetric = calcVolumetricWeight(length, width, height);
+    const billableWeight = Math.max(weight, volumetric);
+    const operationalRouteType = resolveOperationalRouteType(originArea, destArea);
+    const pricingRouteType = resolvePricingRouteType(originArea, destArea);
 
-    // Bắt đầu Transaction - Database BEGIN
+    const pricingRule = await orderRepo.findBestPricingRule(
+      mapPricingRouteTypeForDb(pricingRouteType),
+      destArea.area_type,
+      billableWeight
+    );
+    const baseFee = pricingRule ? Number(pricingRule.price) : 35000;
+
+    let serviceMultiplier = 1.0;
+    if (id_service_type) {
+      const serviceType = await orderRepo.findServiceType(id_service_type);
+      if (serviceType) serviceMultiplier = Number(serviceType.base_multiplier);
+    }
+
+    const shippingFee = Math.round(baseFee * serviceMultiplier);
+    const insuranceFee = calcInsuranceFee(item_value);
+    const totalFee = shippingFee + insuranceFee;
+    const normalizedPayerType = normalizePayerType(payer_type);
+
     const client = await orderRepo.getTxClient();
     try {
       await client.query('BEGIN');
 
-      // Khoá ví (Pessimistic Locking - chống race condition)
-      const wallet = await orderRepo.findWalletForUpdate(id_user, client);
-      if (!wallet) throw new Error('Ví tiền không tồn tại. Vui lòng liên hệ Admin.');
+      let walletAvailable = 0;
+      if (normalizedPayerType === 'SENDER') {
+        const wallet = await orderRepo.findWalletForUpdate(idUser, client);
+        if (!wallet) throw new Error('Vi tien khong ton tai. Vui long lien he admin.');
 
-      const available = Number(wallet.balance) + Number(wallet.credit_limit) - Number(wallet.used_credit);
-      if (available < total_fee) {
-        throw new Error(
-          `Số dư ví không đủ!\n` +
-          `• Phí vận chuyển: ${shipping_fee.toLocaleString()}đ\n` +
-          `• Phí bảo hiểm: ${insurance_fee.toLocaleString()}đ\n` +
-          `• Tổng cần thanh toán: ${total_fee.toLocaleString()}đ\n` +
-          `• Số dư khả dụng: ${available.toLocaleString()}đ\n` +
-          `→ Vui lòng nạp thêm: ${(total_fee - available).toLocaleString()}đ`
-        );
+        walletAvailable = Number(wallet.balance) + Number(wallet.credit_limit) - Number(wallet.used_credit);
+        if (walletAvailable < totalFee) {
+          throw new Error(
+            `So du vi khong du.\n` +
+              `• Phi van chuyen: ${shippingFee.toLocaleString()}d\n` +
+              `• Phi bao hiem: ${insuranceFee.toLocaleString()}d\n` +
+              `• Tong can thanh toan: ${totalFee.toLocaleString()}d\n` +
+              `• So du kha dung: ${walletAvailable.toLocaleString()}d\n` +
+              `-> Vui long nap them: ${(totalFee - walletAvailable).toLocaleString()}d`
+          );
+        }
+
+        await orderRepo.deductWalletAndLog(wallet.id_wallet, totalFee, 'PHI VAN CHUYEN DON', client);
+      } else {
+        const wallet = await shopRepo.getWalletByUserId(idUser);
+        walletAvailable = wallet ? Number(wallet.balance) + Number(wallet.credit_limit) - Number(wallet.used_credit) : 0;
       }
 
-      // Trừ tiền ví + ghi lịch sử
-      await orderRepo.deductWalletAndLog(
-        wallet.id_wallet,
-        total_fee,
-        `PHÍ VẬN CHUYỂN ĐƠN`,
+      const trackingCode = generateTrackingCode();
+      const idOrder = await orderRepo.insertOrder(
+        {
+          tracking_code: trackingCode,
+          id_store,
+          id_service_type: id_service_type || null,
+          receiver_name,
+          receiver_phone,
+          receiver_address,
+          id_dest_area,
+          weight: billableWeight,
+          item_value,
+          cod_amount,
+          insurance_fee: insuranceFee,
+          shipping_fee: shippingFee,
+          note,
+          status: 'CHỜ LẤY HÀNG',
+          payer_type: normalizedPayerType,
+          pickup_shift,
+          dropoff_spoke_id,
+        },
         client
       );
 
-      // Sinh mã tracking
-      const tracking_code = generateTrackingCode();
-
-      // Tạo đơn hàng
-      const id_order = await orderRepo.insertOrder({
-        tracking_code, id_store, id_service_type: id_service_type || null,
-        receiver_name, receiver_phone, receiver_address,
-        id_dest_area, weight: billable_weight, item_value, cod_amount,
-        insurance_fee, shipping_fee, note,
-        status: 'CHỜ LẤY HÀNG'
-      }, client);
-
-      // Ghi log đầu tiên (lấy Hub đầu tiên làm điểm xuất phát)
       const hubLoc = await client.query('SELECT h.id_location FROM hubs h ORDER BY id_hub LIMIT 1');
       if (hubLoc.rows[0]) {
-        await orderRepo.insertOrderLog(id_order, hubLoc.rows[0].id_location, id_user, 'TẠO ĐƠN', client);
+        await orderRepo.insertOrderLog(idOrder, hubLoc.rows[0].id_location, idUser, 'TAO DON', client);
       }
 
       await client.query('COMMIT');
 
+      const paymentFlow = buildPaymentFlow(normalizedPayerType, totalFee, Number(cod_amount || 0), walletAvailable);
+
       return {
-        tracking_code,
-        id_order,
+        tracking_code: trackingCode,
+        id_order: idOrder,
         status: 'CHỜ LẤY HÀNG',
         pickup_store: store.store_name,
         pickup_address: store.address,
         receiver: { name: receiver_name, phone: receiver_phone, address: receiver_address },
         fee_summary: {
-          shipping_fee,
-          insurance_fee,
-          total_charged: total_fee,
-          remaining_balance: available - total_fee
-        }
+          payer_type: normalizedPayerType,
+          operational_route_type: operationalRouteType,
+          pricing_route_type: pricingRule?.route_type || mapPricingRouteTypeForDb(pricingRouteType),
+          shipping_fee: shippingFee,
+          insurance_fee: insuranceFee,
+          total_fee: totalFee,
+          sender_charged_now: paymentFlow.sender_charge_now,
+          receiver_fee_on_delivery: paymentFlow.receiver_fee_on_delivery,
+          cash_to_collect_on_delivery: paymentFlow.cash_to_collect_on_delivery,
+          remaining_balance: normalizedPayerType === 'SENDER' ? walletAvailable - totalFee : walletAvailable,
+        },
       };
-
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -212,19 +331,13 @@ export class OrderService {
     }
   }
 
-  // =============================================
-  // D. XEM DANH SÁCH ĐƠN HÀNG CỦA SHOP
-  // =============================================
-  async getMyOrders(id_user: number, status_filter?: string) {
-    return await orderRepo.findOrdersByShopUserId(id_user, status_filter);
+  async getMyOrders(idUser: number, statusFilter?: string) {
+    return await orderRepo.findOrdersByShopUserId(idUser, statusFilter);
   }
 
-  // =============================================
-  // E. TRA CỨU TRACKING (Public)
-  // =============================================
-  async trackOrder(tracking_code: string) {
-    const result = await orderRepo.findOrderByTrackingCode(tracking_code);
-    if (!result) throw new Error(`Không tìm thấy vận đơn có mã: ${tracking_code}`);
+  async trackOrder(trackingCode: string) {
+    const result = await orderRepo.findOrderByTrackingCode(trackingCode);
+    if (!result) throw new Error(`Khong tim thay van don co ma: ${trackingCode}`);
     return result;
   }
 }

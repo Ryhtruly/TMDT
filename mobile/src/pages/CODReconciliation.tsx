@@ -3,19 +3,38 @@ import { FiDollarSign, FiCheckCircle, FiPackage, FiAlertCircle, FiRefreshCw, FiI
 import api from '../api/client';
 import './COD.css';
 
-interface DeliveredOrder {
+interface PendingCashOrder {
   tracking_code: string;
   receiver_name: string;
   receiver_phone: string;
   cod_amount: number | string;
-  status: string;
+  receiver_fee_amount: number | string;
+  cash_to_remit: number | string;
+  payer_type: string;
 }
 
+interface CodSummary {
+  order_count: number;
+  total_cod: number;
+  total_receiver_fee: number;
+  total_cash_held: number;
+  orders: PendingCashOrder[];
+}
+
+const emptySummary: CodSummary = {
+  order_count: 0,
+  total_cod: 0,
+  total_receiver_fee: 0,
+  total_cash_held: 0,
+  orders: [],
+};
+
 const CODReconciliation = () => {
-  const [orders, setOrders] = useState<DeliveredOrder[]>([]);
+  const [summary, setSummary] = useState<CodSummary>(emptySummary);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedAmount, setSubmittedAmount] = useState(0);
   const [toast, setToast] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
 
@@ -25,38 +44,39 @@ const CODReconciliation = () => {
     setTimeout(() => setToast(''), 3500);
   };
 
-  const fetchCODOrders = async () => {
+  const fetchCodSummary = async () => {
     setLoading(true);
     try {
-      const res: any = await api.get('/shipper/delivery-list');
-      const all: DeliveredOrder[] = res?.data?.orders || res?.orders || [];
-      // Show only orders with COD that haven't been reconciled
-      const codOrders = all.filter((o: any) =>
-        Number(o.cod_amount) > 0 && o.status === 'GIAO THÀNH CÔNG'
-      );
-      setOrders(codOrders);
+      const res: any = await api.get('/shipper/cod-summary');
+      setSummary(res?.data || emptySummary);
     } catch (err) {
       console.error(err);
+      setSummary(emptySummary);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchCODOrders(); }, []);
-
-  const totalCOD = orders.reduce((sum, o) => sum + Number(o.cod_amount || 0), 0);
+  useEffect(() => {
+    fetchCodSummary();
+  }, []);
 
   const handleSubmitCOD = async () => {
-    if (orders.length === 0) { showToast('Không có tiền COD nào cần nộp!', 'info'); return; }
+    if (summary.orders.length === 0) {
+      showToast('Khong co khoan tien nao can nop!', 'info');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      // This would call a real API endpoint for COD submission
-      // For now, we simulate the reconciliation flow
-      await new Promise(r => setTimeout(r, 1500)); // Simulate API call
+      const res: any = await api.post('/shipper/cod-reconciliation', {});
+      const amount = Number(res?.data?.total_cash || 0);
+      setSubmittedAmount(amount);
       setSubmitted(true);
-      showToast(`✅ Đã xác nhận nộp ${totalCOD.toLocaleString('vi-VN')}đ về bưu cục!`, 'success');
-    } catch {
-      showToast('Không thể gửi yêu cầu đối soát. Thử lại sau!', 'error');
+      showToast(`Da xac nhan nop ${amount.toLocaleString('vi-VN')}d ve buu cuc!`, 'success');
+      setSummary(emptySummary);
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || 'Khong the gui doi soat. Thu lai sau!', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -67,14 +87,26 @@ const CODReconciliation = () => {
       <div className="cod-page">
         <div className="cod-success-screen">
           <div className="cod-success-icon"><FiCheckCircle size={50} /></div>
-          <h3>Đối Soát Thành Công!</h3>
-          <p>Bạn đã xác nhận nộp <br /><strong>{totalCOD.toLocaleString('vi-VN')}đ</strong><br />về bưu cục trong ca hôm nay.</p>
+          <h3>Doi Soat Thanh Cong!</h3>
+          <p>
+            Ban da xac nhan nop <br />
+            <strong>{submittedAmount.toLocaleString('vi-VN')}d</strong>
+            <br />
+            ve buu cuc trong ca lam nay.
+          </p>
           <div className="cod-success-note">
             <FiInfo size={13} />
-            Số tiền sẽ được thủ kho xác nhận. Hệ thống sẽ cập nhật sau khi đối soát hoàn tất.
+            Danh sach don da nop da duoc tru khoi muc "tien dang giu".
           </div>
-          <button className="btn-outline" style={{ marginTop: 16 }} onClick={() => { setSubmitted(false); setOrders([]); fetchCODOrders(); }}>
-            Quay lại
+          <button
+            className="btn-outline"
+            style={{ marginTop: 16 }}
+            onClick={() => {
+              setSubmitted(false);
+              fetchCodSummary();
+            }}
+          >
+            Quay lai
           </button>
         </div>
       </div>
@@ -85,76 +117,84 @@ const CODReconciliation = () => {
     <div className="cod-page">
       {toast && <div className={`toast toast-${toastType}`}>{toast}</div>}
 
-      {/* Header */}
       <div className="cod-header">
         <div>
-          <h2 className="cod-title">Đối Soát COD</h2>
-          <p className="cod-sub">Tổng tiền mặt cần nộp về bưu cục</p>
+          <h2 className="cod-title">Doi Soat COD</h2>
+          <p className="cod-sub">Tong tien mat shipper chua nop ve buu cuc</p>
         </div>
-        <button className="cod-refresh-btn" onClick={fetchCODOrders}>
+        <button className="cod-refresh-btn" onClick={fetchCodSummary}>
           <FiRefreshCw size={15} />
         </button>
       </div>
 
-      {/* Total COD Card */}
       <div className="cod-total-card">
         <div className="cod-total-icon"><FiDollarSign size={32} /></div>
         <div className="cod-total-body">
-          <div className="cod-total-label">Tổng COD thu hộ (chưa nộp)</div>
+          <div className="cod-total-label">Tong tien dang giu</div>
           <div className="cod-total-amount">
-            {loading ? '...' : `${totalCOD.toLocaleString('vi-VN')}đ`}
+            {loading ? '...' : `${Number(summary.total_cash_held || 0).toLocaleString('vi-VN')}d`}
           </div>
-          <div className="cod-total-count">{orders.length} đơn giao thành công</div>
+          <div className="cod-total-count">{summary.order_count} don chua doi soat</div>
         </div>
       </div>
 
-      {/* Warning */}
-      {orders.length > 0 && (
-        <div className="cod-warn-box">
-          <FiAlertCircle size={14} />
-          <span>Cuối ca làm việc, bạn phải nộp đủ số tiền trên cho thủ kho tại bưu cục phụ trách.</span>
-        </div>
+      {!loading && summary.orders.length > 0 && (
+        <>
+          <div className="cod-warn-box">
+            <FiAlertCircle size={14} />
+            <span>Cuoi ca, shipper phai nop du tien COD va phi thu ho tu nguoi nhan cho buu cuc.</span>
+          </div>
+
+          <div className="cod-sum-row" style={{ marginTop: 12 }}>
+            <span>Tong COD:</span>
+            <strong>{Number(summary.total_cod || 0).toLocaleString('vi-VN')}d</strong>
+          </div>
+          <div className="cod-sum-row">
+            <span>Phi nguoi nhan da tra:</span>
+            <strong>{Number(summary.total_receiver_fee || 0).toLocaleString('vi-VN')}d</strong>
+          </div>
+        </>
       )}
 
-      {/* Order list */}
       {loading ? (
-        <div className="spinner-center"><div className="spinner" /> Đang tải danh sách COD...</div>
-      ) : orders.length === 0 ? (
+        <div className="spinner-center"><div className="spinner" /> Dang tai danh sach COD...</div>
+      ) : summary.orders.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">🎉</div>
-          <p>Không có COD nào cần đối soát</p>
-          <span>Tất cả đã được nộp hoặc hôm nay chưa có đơn thu COD</span>
+          <p>Khong co khoan tien nao can doi soat</p>
+          <span>Tat ca COD/phi thu ho da duoc nop hoac chua co don thu tien</span>
         </div>
       ) : (
         <>
-          <div className="cod-section-title">Chi tiết các đơn thu COD</div>
+          <div className="cod-section-title">Chi tiet cac don chua nop tien</div>
           <div className="cod-order-list">
-            {orders.map(o => (
-              <div className="cod-order-row" key={o.tracking_code}>
+            {summary.orders.map((order) => (
+              <div className="cod-order-row" key={order.tracking_code}>
                 <div className="cod-order-left">
                   <div className="cod-order-icon"><FiPackage size={16} /></div>
                   <div className="cod-order-info">
-                    <div className="cod-order-code">{o.tracking_code}</div>
-                    <div className="cod-order-name">{o.receiver_name}</div>
+                    <div className="cod-order-code">{order.tracking_code}</div>
+                    <div className="cod-order-name">{order.receiver_name}</div>
+                    {Number(order.receiver_fee_amount || 0) > 0 && (
+                      <div className="cod-order-name">Thu them phi ship: {Number(order.receiver_fee_amount).toLocaleString('vi-VN')}d</div>
+                    )}
                   </div>
                 </div>
-                <div className="cod-order-amount">+{Number(o.cod_amount).toLocaleString('vi-VN')}đ</div>
+                <div className="cod-order-amount">+{Number(order.cash_to_remit).toLocaleString('vi-VN')}d</div>
               </div>
             ))}
           </div>
 
-          {/* Total row */}
           <div className="cod-sum-row">
-            <span>Tổng cần nộp:</span>
-            <strong>{totalCOD.toLocaleString('vi-VN')}đ</strong>
+            <span>Tong can nop:</span>
+            <strong>{Number(summary.total_cash_held || 0).toLocaleString('vi-VN')}d</strong>
           </div>
 
-          {/* Submit button */}
           <div className="cod-submit-area">
             <button className="btn-primary cod-submit-btn" onClick={handleSubmitCOD} disabled={submitting}>
-              {submitting ? <span className="spinner-sm" /> : <><FiCheckCircle size={16} /> Xác Nhận Đã Nộp Tiền Về Bưu Cục</>}
+              {submitting ? <span className="spinner-sm" /> : <><FiCheckCircle size={16} /> Xac Nhan Da Nop Tien Ve Buu Cuc</>}
             </button>
-            <p className="cod-submit-note">Chỉ bấm khi bạn đã nộp thực tế cho thủ kho</p>
+            <p className="cod-submit-note">Chi bam khi ban da nop thuc te cho thu kho</p>
           </div>
         </>
       )}

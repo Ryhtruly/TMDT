@@ -8,7 +8,8 @@ import {
   getWallet, topupWallet, withdrawWallet,
   cancelOrder,
   getCashflowReport,
-  getSpokes
+  getSpokes,
+  resolveDestArea
 } from '../controllers/shop.controller';
 
 import {
@@ -70,5 +71,6 @@ router.get('/cashflow', getCashflowReport);
 
 // Danh sách Bưu cục
 router.get('/spokes', getSpokes);
+router.get('/areas/resolve', resolveDestArea);
 
 export default router;

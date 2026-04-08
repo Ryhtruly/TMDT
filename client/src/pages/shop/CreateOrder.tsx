@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { FiChevronRight, FiImage, FiBox, FiPhone } from 'react-icons/fi';
+import { useEffect, useState } from 'react';
+import { FiBox, FiChevronRight, FiPhone } from 'react-icons/fi';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import apiClient from '../../api/client';
 import './CreateOrder.css';
@@ -7,22 +7,18 @@ import './CreateOrder.css';
 const CreateOrder = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const paramType = searchParams.get('type') || '1'; // 1: nhe, 2: nang
-  
+  const paramType = searchParams.get('type') || '1';
+
   const [stores, setStores] = useState<any[]>([]);
   const [spokes, setSpokes] = useState<any[]>([]);
-  
-  // Address Modal States
-  const [showAddressModal, setShowAddressModal] = useState(false);
-  const [addressModalType, setAddressModalType] = useState<'RECEIVER'|'SENDER'|null>(null);
-  
-  // Store Selector Modal
-  const [showStoreSelector, setShowStoreSelector] = useState(false);
-
   const [provinces, setProvinces] = useState<any[]>([]);
   const [districts, setDistricts] = useState<any[]>([]);
   const [wards, setWards] = useState<any[]>([]);
-  
+
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [addressModalType, setAddressModalType] = useState<'RECEIVER' | 'SENDER' | null>(null);
+  const [showStoreSelector, setShowStoreSelector] = useState(false);
+
   const [selectedProv, setSelectedProv] = useState<any>(null);
   const [selectedDist, setSelectedDist] = useState<any>(null);
   const [selectedWard, setSelectedWard] = useState<any>(null);
@@ -31,529 +27,331 @@ const CreateOrder = () => {
   const [pickupType, setPickupType] = useState('TAN_NOI');
   const [pickupShift, setPickupShift] = useState('');
   const [dropoffSpokeId, setDropoffSpokeId] = useState('');
+  const [idDestArea, setIdDestArea] = useState<number | null>(null);
+  const [previewFee, setPreviewFee] = useState<any>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [loadingSubmit, setLoadingSubmit] = useState(false);
 
   const [formData, setFormData] = useState({
     id_store: '',
     receiver_name: '',
     receiver_phone: '',
     receiver_address: '',
-    id_service_type: Number(paramType), // 1: Nhe, 2: Nang
+    payer_type: 'SENDER',
+    id_service_type: Number(paramType),
     weight: paramType === '2' ? 20000 : 200,
     item_value: 0,
     cod_amount: 0,
     length: 10,
     width: 10,
     height: 10,
-    note: ''
+    note: '',
   });
 
-  const [previewFee, setPreviewFee] = useState<any>(null);
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [loadingSubmit, setLoadingSubmit] = useState(false);
-
-  const fetchStores = async () => {
-    try {
-      const res = await apiClient.get('/shop/stores') as any;
-      if (res?.status === 'success' && res.data.length > 0) {
-        setStores(res.data);
-        const defaultId = localStorage.getItem('default_store');
-        if (defaultId && res.data.some((s: any) => String(s.id_store) === defaultId)) {
-          setFormData(prev => ({...prev, id_store: defaultId}));
-        } else {
-          setFormData(prev => ({...prev, id_store: res.data[0].id_store}));
-        }
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  const getActiveStore = () => stores.find((s) => String(s.id_store) === String(formData.id_store));
 
   useEffect(() => {
-    fetchStores();
+    setFormData((prev) => ({
+      ...prev,
+      id_service_type: Number(paramType),
+      weight: paramType === '2' ? 20000 : prev.weight === 20000 ? 200 : prev.weight,
+    }));
+  }, [paramType]);
 
-    // Fetch Spokes from backend
-    apiClient.get('/shop/spokes').then((res: any) => {
-      if (res?.status === 'success') {
-        setSpokes(res.data);
+  useEffect(() => {
+    const load = async () => {
+      const storeRes = (await apiClient.get('/shop/stores').catch(() => null)) as any;
+      if (storeRes?.status === 'success') {
+        setStores(storeRes.data);
+        const defaultId = localStorage.getItem('default_store');
+        const firstId = defaultId && storeRes.data.some((s: any) => String(s.id_store) === defaultId)
+          ? defaultId
+          : String(storeRes.data[0]?.id_store || '');
+        if (firstId) setFormData((prev) => ({ ...prev, id_store: firstId }));
       }
-    }).catch(console.error);
 
-    // Fetch Provinces for Address Modal
-    fetch('https://provinces.open-api.vn/api/p/')
-      .then(res => res.json())
-      .then(data => setProvinces(data))
-      .catch(console.error);
-
-    // Listener sync default_store
-    const handleStoreSync = () => {
-      const defaultId = localStorage.getItem('default_store');
-      if (defaultId) {
-        setFormData(prev => ({...prev, id_store: defaultId}));
-      }
+      const spokeRes = (await apiClient.get('/shop/spokes').catch(() => null)) as any;
+      if (spokeRes?.status === 'success') setSpokes(spokeRes.data);
     };
-    window.addEventListener('default_store_changed', handleStoreSync);
-    return () => window.removeEventListener('default_store_changed', handleStoreSync);
+
+    load().catch(console.error);
+    fetch('https://provinces.open-api.vn/api/p/').then((res) => res.json()).then(setProvinces).catch(console.error);
+    const onStoreChanged = () => {
+      const id = localStorage.getItem('default_store');
+      if (id) setFormData((prev) => ({ ...prev, id_store: id }));
+    };
+    window.addEventListener('default_store_changed', onStoreChanged);
+    return () => window.removeEventListener('default_store_changed', onStoreChanged);
   }, []);
 
   const handleProvChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const code = e.target.value;
-    const prov = provinces.find(p => p.code == code);
+    const prov = provinces.find((p) => String(p.code) === e.target.value) || null;
     setSelectedProv(prov);
     setSelectedDist(null);
     setSelectedWard(null);
     setDistricts([]);
     setWards([]);
-    if (!code) return;
-    const res = await fetch(`https://provinces.open-api.vn/api/p/${code}?depth=2`);
+    if (!prov) return;
+    const res = await fetch(`https://provinces.open-api.vn/api/p/${prov.code}?depth=2`);
     const data = await res.json();
     setDistricts(data.districts || []);
   };
 
   const handleDistChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const code = e.target.value;
-    const dist = districts.find(d => d.code == code);
+    const dist = districts.find((d) => String(d.code) === e.target.value) || null;
     setSelectedDist(dist);
     setSelectedWard(null);
     setWards([]);
-    if (!code) return;
-    const res = await fetch(`https://provinces.open-api.vn/api/d/${code}?depth=2`);
+    if (!dist) return;
+    const res = await fetch(`https://provinces.open-api.vn/api/d/${dist.code}?depth=2`);
     const data = await res.json();
     setWards(data.wards || []);
   };
 
-  const openAddressModalWithData = async (type: 'RECEIVER' | 'SENDER') => {
+  const openAddressModal = async (type: 'RECEIVER' | 'SENDER') => {
     setAddressModalType(type);
     setShowAddressModal(true);
-    
-    let addressStr = '';
-    if (type === 'SENDER') {
-      addressStr = getActiveStore()?.address || '';
-    } else {
-      addressStr = formData.receiver_address || '';
-    }
-
-    if (!addressStr) {
-      setSelectedProv(null); setSelectedDist(null); setSelectedWard(null); setStreetNum('');
-      return;
-    }
-    
-    // Parse format: "street, ward, district, province"
-    const parts = addressStr.split(', ');
-    if (parts.length >= 4) {
-      const pName = parts[parts.length - 1];
-      const dName = parts[parts.length - 2];
-      const wName = parts[parts.length - 3];
-      const sNum = parts.slice(0, parts.length - 3).join(', ');
-      
-      const prov = provinces.find(p => p.name === pName);
-      if (prov) {
-        setSelectedProv(prov);
-        const repD = await fetch(`https://provinces.open-api.vn/api/p/${prov.code}?depth=2`);
-        const datD = await repD.json();
-        setDistricts(datD.districts || []);
-        
-        const dist = (datD.districts || []).find((d: any) => d.name === dName);
-        if (dist) {
-          setSelectedDist(dist);
-          const repW = await fetch(`https://provinces.open-api.vn/api/d/${dist.code}?depth=2`);
-          const datW = await repW.json();
-          setWards(datW.wards || []);
-          
-          const ward = (datW.wards || []).find((w: any) => w.name === wName);
-          if (ward) {
-            setSelectedWard(ward);
-            setStreetNum(sNum);
-            return;
-          }
-        }
-      }
-    }
-    // Fallback if parsing fails or parts don't strictly match
     setSelectedProv(null);
     setSelectedDist(null);
     setSelectedWard(null);
     setDistricts([]);
     setWards([]);
-    setStreetNum(addressStr);
+    setStreetNum('');
   };
 
   const saveAddress = async () => {
     if (!selectedProv || !selectedDist || !selectedWard || !streetNum) {
-      return alert('Vui lòng nhập đầy đủ thông tin địa chỉ!');
+      alert('Vui long nhap day du thong tin dia chi.');
+      return;
     }
-    const fullAddress = `${streetNum}, ${selectedWard.name}, ${selectedDist.name}, ${selectedProv.name}`;
-    
-    if (addressModalType === 'RECEIVER') {
-      setFormData({...formData, receiver_address: fullAddress});
-      setShowAddressModal(false);
-      setAddressModalType(null);
-    } else if (addressModalType === 'SENDER') {
-      const store = getActiveStore();
-      if (!store) return;
-      try {
-        await apiClient.put(`/shop/stores/${store.id_store}`, {
-          ...store,
-          address: fullAddress
-        });
-        alert('Cập nhật địa chỉ kho thành công!');
-        fetchStores(); // Reload stores so UI gets updated address
-        setShowAddressModal(false);
-        setAddressModalType(null);
-      } catch (err) {
-        alert('Lỗi khi cập nhật kho');
-      }
-    }
-  };
 
-  const handleSelectAnotherStore = (id: string) => {
-    setFormData({...formData, id_store: id});
-    localStorage.setItem('default_store', id);
-    window.dispatchEvent(new Event('default_store_changed'));
-    setShowStoreSelector(false);
+    const fullAddress = `${streetNum}, ${selectedWard.name}, ${selectedDist.name}, ${selectedProv.name}`;
+    if (addressModalType === 'RECEIVER') {
+      try {
+        const res = (await apiClient.get(
+          `/shop/areas/resolve?province=${encodeURIComponent(selectedProv.name)}&district=${encodeURIComponent(selectedDist.name)}`
+        )) as any;
+        setIdDestArea(Number(res.data.id_area));
+        setFormData((prev) => ({ ...prev, receiver_address: fullAddress }));
+        setShowAddressModal(false);
+      } catch (err: any) {
+        alert(err?.response?.data?.message || 'Chua cau hinh khu vuc giao cho dia chi nay.');
+      }
+      return;
+    }
+
+    const store = getActiveStore();
+    if (!store) return;
+    await apiClient.put(`/shop/stores/${store.id_store}`, { ...store, address: fullAddress });
+    setStores((prev) => prev.map((item) => (item.id_store === store.id_store ? { ...item, address: fullAddress } : item)));
+    setShowAddressModal(false);
   };
 
   useEffect(() => {
-    const getPreview = async () => {
-      if (!formData.id_service_type || !formData.weight) return;
+    const timer = setTimeout(async () => {
+      if (!formData.id_store || !idDestArea) {
+        setPreviewFee(null);
+        return;
+      }
       setLoadingPreview(true);
       try {
-        const payload = {
+        const res = (await apiClient.post('/shop/orders/preview-fee', {
+          id_store: Number(formData.id_store),
+          id_dest_area: idDestArea,
+          payer_type: formData.payer_type,
           id_service_type: Number(formData.id_service_type),
           weight: Number(formData.weight),
-          item_value: Number(formData.item_value || 0)
-        };
-        const res = await apiClient.post('/orders/preview-fee', payload) as any;
-        if (res?.status === 'success') {
-          setPreviewFee(res.feeDetail);
-        }
-      } catch (err) {
+          item_value: Number(formData.item_value || 0),
+          cod_amount: Number(formData.cod_amount || 0),
+          length: Number(formData.length || 0),
+          width: Number(formData.width || 0),
+          height: Number(formData.height || 0),
+        })) as any;
+        setPreviewFee(res?.status === 'success' ? res.data : null);
+      } catch {
         setPreviewFee(null);
       } finally {
         setLoadingPreview(false);
       }
-    };
-    const timer = setTimeout(getPreview, 500);
+    }, 400);
     return () => clearTimeout(timer);
-  }, [formData.id_service_type, formData.weight, formData.item_value]);
+  }, [formData, idDestArea]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.id_store) return alert('Vui lòng tạo kho gửi hàng trước!');
+    if (!formData.id_store) return alert('Vui long tao kho gui hang truoc.');
+    if (!idDestArea) return alert('Vui long chon dia chi nguoi nhan thuoc khu vuc da cau hinh.');
+
     try {
       setLoadingSubmit(true);
-      await apiClient.post('/orders', {
+      const res = (await apiClient.post('/shop/orders', {
         ...formData,
         id_store: Number(formData.id_store),
-        id_service_type: Number(formData.id_service_type),
-        weight: Number(formData.weight),
-        pickup_shift: pickupShift || 'Ca mặc định',
-        dropoff_spoke_id: dropoffSpokeId ? Number(dropoffSpokeId) : null
-      });
-      alert('Tạo đơn hàng thành công!');
+        id_dest_area: idDestArea,
+        pickup_shift: pickupShift || 'Ca mac dinh',
+        dropoff_spoke_id: dropoffSpokeId ? Number(dropoffSpokeId) : null,
+      })) as any;
+
+      window.dispatchEvent(new Event('wallet_updated'));
+      const fee = res?.data?.fee_summary || {};
+      const chargedNow = Number(fee.sender_charged_now || 0);
+      const cashCollect = Number(fee.cash_to_collect_on_delivery || 0);
+      alert(
+        formData.payer_type === 'RECEIVER'
+          ? `Tao don thanh cong.\nShipper se thu ${cashCollect.toLocaleString('vi-VN')} d khi giao.`
+          : `Tao don thanh cong.\nDa tru ${chargedNow.toLocaleString('vi-VN')} d tu vi shop.`
+      );
       navigate('/orders');
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Có lỗi xảy ra.');
+      alert(err?.response?.data?.message || 'Co loi xay ra.');
     } finally {
       setLoadingSubmit(false);
     }
   };
 
-  const getActiveStore = () => stores.find(s => String(s.id_store) === String(formData.id_store));
+  const fee = previewFee?.fee_breakdown || {};
+  const flow = previewFee?.payment_flow || {};
+  const walletCheck = previewFee?.wallet_check || {};
+  const billableWeight = Math.max(Number(formData.weight || 0), (Number(formData.length || 0) * Number(formData.width || 0) * Number(formData.height || 0)) / 5);
 
   return (
     <form className="create-order-page" onSubmit={handleSubmit}>
       <div className="order-layout-7-3">
-        {/* Main Column */}
         <div>
           <div className="ghn-env-border"></div>
-          <div className="ghn-card" style={{borderRadius: '0 0 8px 8px'}}>
-            
-            {/* BÊN GỬI */}
+          <div className="ghn-card" style={{ borderRadius: '0 0 8px 8px' }}>
             <div className="sender-block">
               <div className="sender-info">
-                <div style={{fontWeight: 700, color: '#000', marginBottom: '8px'}}>Bên gửi</div>
+                <div style={{ fontWeight: 700, color: '#000', marginBottom: '8px' }}>Ben gui</div>
                 {getActiveStore() ? (
                   <>
-                    <div className="sender-name-phone">
-                      <span>{getActiveStore()?.store_name}</span>
-                      <span><FiPhone size={14}/> {getActiveStore()?.phone}</span>
-                    </div>
-                    <div style={{margin: '4px 0'}}>{getActiveStore()?.address || 'Chưa thiết lập'}</div>
-                    <div style={{marginTop: '8px'}}>
-                      <span className="edit-link" style={{marginRight: '16px'}} onClick={() => setShowStoreSelector(true)}>Chọn kho khác</span>
-                      <span className="edit-link" onClick={() => openAddressModalWithData('SENDER')}>Sửa địa chỉ</span>
+                    <div className="sender-name-phone"><span>{getActiveStore()?.store_name}</span><span><FiPhone size={14} /> {getActiveStore()?.phone}</span></div>
+                    <div style={{ margin: '4px 0' }}>{getActiveStore()?.address || 'Chua thiet lap'}</div>
+                    <div style={{ marginTop: '8px' }}>
+                      <span className="edit-link" style={{ marginRight: '16px' }} onClick={() => setShowStoreSelector(true)}>Chon kho khac</span>
+                      <span className="edit-link" onClick={() => openAddressModal('SENDER')}>Sua dia chi</span>
                     </div>
                   </>
-                ) : (
-                  <span className="edit-link" onClick={() => navigate('/stores')}>Vui lòng thêm Kho Lấy Hàng</span>
-                )}
+                ) : <span className="edit-link" onClick={() => navigate('/stores')}>Vui long them kho lay hang</span>}
               </div>
               <div>
-                 <div className="radio-group-flex" style={{marginBottom: '16px'}}>
-                    <label className="ghn-radio">
-                      <input type="radio" name="pickup_type" checked={pickupType === 'TAN_NOI'} onChange={() => setPickupType('TAN_NOI')} />
-                      Lấy hàng tận nơi
-                    </label>
-                    <label className="ghn-radio">
-                      <input type="radio" name="pickup_type" checked={pickupType === 'BUU_CUC'} onChange={() => setPickupType('BUU_CUC')} />
-                      Gửi hàng tại bưu cục
-                    </label>
-                 </div>
-                 
-                 {pickupType === 'TAN_NOI' ? (
-                   <select className="ghn-input" value={pickupShift} onChange={e => setPickupShift(e.target.value)}>
-                     <option value="">Chọn ca lấy hàng (Tự động)</option>
-                     <option value={`Ca lấy: Hôm nay (12h00 - 18h00)`}>Ca lấy: Hôm nay (12h00 - 18h00)</option>
-                     <option value={`Ca lấy: Ngày mai (07h00 - 12h00)`}>Ca lấy: Ngày mai (07h00 - 12h00)</option>
-                     <option value={`Ca lấy: Ngày mai (12h00 - 18h00)`}>Ca lấy: Ngày mai (12h00 - 18h00)</option>
-                   </select>
-                 ) : (
-                   <select className="ghn-input" value={dropoffSpokeId} onChange={e => setDropoffSpokeId(e.target.value)} required>
-                     <option value="">Chọn bưu cục muốn gửi *</option>
-                     {spokes.map(sp => (
-                       <option key={sp.id_spoke} value={sp.id_spoke}>{sp.spoke_name} - {sp.address}</option>
-                     ))}
-                   </select>
-                 )}
+                <div className="radio-group-flex" style={{ marginBottom: '16px' }}>
+                  <label className="ghn-radio"><input type="radio" checked={pickupType === 'TAN_NOI'} onChange={() => setPickupType('TAN_NOI')} /> Lay hang tan noi</label>
+                  <label className="ghn-radio"><input type="radio" checked={pickupType === 'BUU_CUC'} onChange={() => setPickupType('BUU_CUC')} /> Gui hang tai buu cuc</label>
+                </div>
+                {pickupType === 'TAN_NOI' ? (
+                  <select className="ghn-input" value={pickupShift} onChange={(e) => setPickupShift(e.target.value)}>
+                    <option value="">Chon ca lay hang (Tu dong)</option>
+                    <option value="Ca lay: Hom nay (12h00 - 18h00)">Ca lay: Hom nay (12h00 - 18h00)</option>
+                    <option value="Ca lay: Ngay mai (07h00 - 12h00)">Ca lay: Ngay mai (07h00 - 12h00)</option>
+                    <option value="Ca lay: Ngay mai (12h00 - 18h00)">Ca lay: Ngay mai (12h00 - 18h00)</option>
+                  </select>
+                ) : (
+                  <select className="ghn-input" value={dropoffSpokeId} onChange={(e) => setDropoffSpokeId(e.target.value)} required>
+                    <option value="">Chon buu cuc muon gui *</option>
+                    {spokes.map((sp: any) => <option key={sp.id_spoke} value={sp.id_spoke}>{sp.spoke_name} - {sp.address}</option>)}
+                  </select>
+                )}
               </div>
             </div>
 
-            {/* BÊN NHẬN */}
-            <div style={{fontWeight: 700, color: '#000', marginBottom: '16px'}}>Bên nhận</div>
+            <div style={{ fontWeight: 700, color: '#000', marginBottom: '16px' }}>Ben nhan</div>
             <div className="form-grid-2">
               <div className="ghn-form-group">
-                <label>Số điện thoại *</label>
-                <input required type="tel" className="ghn-input" placeholder="Nhập số điện thoại" 
-                   value={formData.receiver_phone} onChange={e => setFormData({...formData, receiver_phone: e.target.value})} 
-                />
-                {formData.receiver_phone.length >= 10 && <div className="safe-badge">An toàn 91%</div>}
+                <label>So dien thoai *</label>
+                <input required type="tel" className="ghn-input" placeholder="Nhap so dien thoai" value={formData.receiver_phone} onChange={(e) => setFormData((p) => ({ ...p, receiver_phone: e.target.value }))} />
               </div>
               <div className="ghn-form-group">
-                <label>Địa chỉ người nhận *</label>
-                <div style={{position: 'relative'}} onClick={() => openAddressModalWithData('RECEIVER')}>
-                  <input required type="text" className="ghn-input" placeholder="Nhập địa chỉ người nhận" 
-                     value={formData.receiver_address} onChange={() => {}} readOnly
-                     style={{ cursor: 'pointer' }}
-                  />
-                  <FiChevronRight style={{position: 'absolute', right: 12, top: 12, color: 'var(--slate-400)'}}/>
+                <label>Dia chi nguoi nhan *</label>
+                <div style={{ position: 'relative' }} onClick={() => openAddressModal('RECEIVER')}>
+                  <input required type="text" className="ghn-input" placeholder="Nhap dia chi nguoi nhan" value={formData.receiver_address} readOnly style={{ cursor: 'pointer' }} />
+                  <FiChevronRight style={{ position: 'absolute', right: 12, top: 12, color: 'var(--slate-400)' }} />
                 </div>
               </div>
             </div>
             <div className="form-grid-2">
               <div className="ghn-form-group">
-                <label>Họ tên *</label>
-                <input required type="text" className="ghn-input" placeholder="Nhập họ tên" 
-                   value={formData.receiver_name} onChange={e => setFormData({...formData, receiver_name: e.target.value})}
-                />
+                <label>Ho ten *</label>
+                <input required type="text" className="ghn-input" placeholder="Nhap ho ten" value={formData.receiver_name} onChange={(e) => setFormData((p) => ({ ...p, receiver_name: e.target.value }))} />
               </div>
             </div>
           </div>
 
-          {/* THÔNG TIN KIỆN HÀNG */}
           <div className="ghn-card">
-            <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '16px'}}>
-               <div className="ghn-card-title" style={{margin: 0}}>Thông tin kiện hàng</div>
-               <button type="button" className="edit-link" style={{border: 'none', background: 'none'}}>+ Kiện có sẵn</button>
+            <div className="ghn-card-title">Thong tin kien hang</div>
+            <div className="dimension-inputs" style={{ marginBottom: '16px' }}>
+              <div className="dimension-label">Dai (cm) *</div>
+              <input type="number" className="ghn-input" value={formData.length} onChange={(e) => setFormData((p) => ({ ...p, length: Number(e.target.value) }))} />
+              <div className="dimension-label">Rong (cm) *</div>
+              <input type="number" className="ghn-input" value={formData.width} onChange={(e) => setFormData((p) => ({ ...p, width: Number(e.target.value) }))} />
+              <div className="dimension-label">Cao (cm) *</div>
+              <input type="number" className="ghn-input" value={formData.height} onChange={(e) => setFormData((p) => ({ ...p, height: Number(e.target.value) }))} />
             </div>
-            
-            <div style={{display: 'flex', gap: '24px', alignItems: 'flex-start'}}>
-                <div style={{padding: '8px 16px', background: 'var(--slate-50)', borderRadius: '4px', fontWeight: 600}}>Kiện 1</div>
-                
-                <div style={{flex: 1, display: 'flex', flexDirection: 'column', gap: '16px'}}>
-                    <div className="dimension-inputs">
-                       <div className="dimension-label">Dài (cm) *</div>
-                       <input type="number" className="ghn-input" value={formData.length} onChange={e => setFormData({...formData, length: Number(e.target.value)})} />
-                       <div className="dimension-label">Rộng (cm) *</div>
-                       <input type="number" className="ghn-input" value={formData.width} onChange={e => setFormData({...formData, width: Number(e.target.value)})} />
-                       <div className="dimension-label">Cao (cm) *</div>
-                       <input type="number" className="ghn-input" value={formData.height} onChange={e => setFormData({...formData, height: Number(e.target.value)})} />
-                    </div>
-                    <div className="dimension-inputs">
-                       <div className="dimension-label" style={{width: '60px'}}>Kiện *</div>
-                       <input type="text" className="ghn-input" style={{flex: 1, textAlign: 'left'}} placeholder="Nhập tên kiện" defaultValue="Hàng hóa" />
-                       <div className="dimension-label">KL (gram) *</div>
-                       <input type="number" className="ghn-input" value={formData.weight} onChange={e => setFormData({...formData, weight: Number(e.target.value)})} />
-                       <div style={{color: 'var(--primary-color)', fontWeight: 600, fontSize: '14px', marginLeft: '12px'}}>
-                          KL qui đổi: {Math.max(formData.weight, (formData.length * formData.width * formData.height) / 5)} g
-                       </div>
-                    </div>
-                </div>
-
-                <div className="upload-box">
-                  <FiImage size={24} />
-                </div>
+            <div className="dimension-inputs">
+              <div className="dimension-label" style={{ width: '60px' }}>Kien *</div>
+              <input type="text" className="ghn-input" style={{ flex: 1, textAlign: 'left' }} defaultValue="Hang hoa" />
+              <div className="dimension-label">KL (gram) *</div>
+              <input type="number" className="ghn-input" value={formData.weight} onChange={(e) => setFormData((p) => ({ ...p, weight: Number(e.target.value) }))} />
+              <div style={{ color: 'var(--primary-color)', fontWeight: 600, fontSize: '14px', marginLeft: '12px' }}>KL quy doi: {billableWeight} g</div>
             </div>
-            
-            <div className="package-footer">
-               <FiBox size={18} color="var(--primary-color)" /> Tổng KL tính cước (1 kiện): {Math.max(formData.weight, (formData.length * formData.width * formData.height) / 5)} g
-            </div>
+            <div className="package-footer"><FiBox size={18} color="var(--primary-color)" /> Tong KL tinh cuoc (1 kien): {billableWeight} g</div>
           </div>
 
-          {/* THÔNG TIN ĐƠN HÀNG */}
           <div className="ghn-card">
-            <div className="ghn-card-title">Thông tin đơn hàng</div>
+            <div className="ghn-card-title">Thong tin don hang</div>
             <div className="form-grid-2">
-              <div className="ghn-form-group">
-                <label>Tổng tiền thu hộ (COD)</label>
-                <input type="number" className="ghn-input" value={formData.cod_amount} onChange={e=>setFormData({...formData, cod_amount: Number(e.target.value)})} />
-              </div>
-              <div className="ghn-form-group">
-                <label>Giao thất bại thu tiền</label>
-                <input type="text" className="ghn-input" disabled value="20,000 đ" />
-              </div>
-            </div>
-            <div className="form-grid-2">
-              <div className="ghn-form-group">
-                <label>Tổng giá trị hàng hóa</label>
-                <input type="number" className="ghn-input" value={formData.item_value} onChange={e=>setFormData({...formData, item_value: Number(e.target.value)})} />
-                <p style={{fontSize: '11px', color: 'var(--danger)', marginTop: '4px'}}>
-                  Tổng giá trị hàng hóa sẽ là căn cứ để bồi thường khi phát sinh rủi ro. Chính sách bồi thường.
-                </p>
-              </div>
-              <div className="ghn-form-group">
-                <label>Mã đơn riêng khách hàng</label>
-                <input type="text" className="ghn-input" placeholder="Nhập mã đơn riêng khách hàng (nếu có)" />
-              </div>
+              <div className="ghn-form-group"><label>Tong tien thu ho (COD)</label><input type="number" className="ghn-input" value={formData.cod_amount} onChange={(e) => setFormData((p) => ({ ...p, cod_amount: Number(e.target.value) }))} /></div>
+              <div className="ghn-form-group"><label>Tong gia tri hang hoa</label><input type="number" className="ghn-input" value={formData.item_value} onChange={(e) => setFormData((p) => ({ ...p, item_value: Number(e.target.value) }))} /></div>
             </div>
           </div>
 
-          {/* GÓI DỊCH VỤ */}
           <div className="ghn-card">
-            <div className="ghn-card-title">Gói dịch vụ</div>
+            <div className="ghn-card-title">Goi dich vu</div>
             <div className="service-cards">
-              <label className={`service-card ${formData.id_service_type === 1 ? 'active' : ''}`}>
-                 <div className="service-card-header">
-                   <input type="radio" name="service_type" checked={formData.id_service_type === 1} onChange={() => setFormData({...formData, id_service_type: 1})} />
-                   <FiBox /> Hàng nhẹ ( &lt; 20kg )
-                 </div>
-                 <div style={{fontSize: '13px', color: 'var(--slate-500)', lineHeight: '1.6'}}>
-                   <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '4px'}}>
-                      <span>Giao dự kiến:</span>
-                      <strong style={{color: '#000'}}>Hôm sau</strong>
-                   </div>
-                   <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                      <span>Cước ước tính:</span>
-                      <strong style={{color: 'var(--danger)'}}>{formData.id_service_type === 1 && previewFee ? Number(previewFee.total_fee).toLocaleString() + ' đ' : '...'}</strong>
-                   </div>
-                 </div>
-              </label>
-
-              <label className={`service-card ${formData.id_service_type === 2 ? 'active' : ''}`}>
-                 <div className="service-card-header">
-                   <input type="radio" name="service_type" checked={formData.id_service_type === 2} onChange={() => setFormData({...formData, id_service_type: 2})} />
-                   <FiBox /> Hàng nặng ( &gt;= 20kg )
-                 </div>
-                 <div style={{fontSize: '13px', color: 'var(--slate-500)', lineHeight: '1.6'}}>
-                   <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '4px'}}>
-                      <span>Giao dự kiến:</span>
-                      <strong style={{color: '#000'}}>3-5 Ngày</strong>
-                   </div>
-                   <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                      <span>Cước ước tính:</span>
-                      <strong style={{color: 'var(--danger)'}}>{formData.id_service_type === 2 && previewFee ? Number(previewFee.total_fee).toLocaleString() + ' đ' : '...'}</strong>
-                   </div>
-                 </div>
-              </label>
+              <label className={`service-card ${formData.id_service_type === 1 ? 'active' : ''}`}><div className="service-card-header"><input type="radio" checked={formData.id_service_type === 1} onChange={() => setFormData((p) => ({ ...p, id_service_type: 1 }))} /> <FiBox /> Hang nhe (&lt; 20kg)</div></label>
+              <label className={`service-card ${formData.id_service_type === 2 ? 'active' : ''}`}><div className="service-card-header"><input type="radio" checked={formData.id_service_type === 2} onChange={() => setFormData((p) => ({ ...p, id_service_type: 2 }))} /> <FiBox /> Hang nang (&gt;= 20kg)</div></label>
             </div>
           </div>
-
         </div>
 
-        {/* Sticky Sidebar */}
         <div className="sticky-bill">
           <div className="bill-content">
-            <div className="bill-row">
-              <span>Phí dịch vụ</span>
-              <strong>{previewFee ? Number(previewFee.estimated_fee).toLocaleString('vi-VN') : 0} đ</strong>
-            </div>
-            {previewFee?.insurance_fee > 0 && (
-              <div className="bill-row">
-                <span>Phí bảo hiểm</span>
-                <strong>{Number(previewFee.insurance_fee).toLocaleString('vi-VN')} đ</strong>
+            <div className="bill-row"><span>Phi dich vu</span><strong>{Number(fee.shipping_fee || 0).toLocaleString('vi-VN')} d</strong></div>
+            {Number(fee.insurance_fee || 0) > 0 && <div className="bill-row"><span>Phi bao hiem</span><strong>{Number(fee.insurance_fee || 0).toLocaleString('vi-VN')} d</strong></div>}
+            <div className="bill-row total"><span>Tong phi:</span><span>{Number(fee.total_fee || 0).toLocaleString('vi-VN')} d</span></div>
+
+            {!previewFee && <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--slate-500)' }}>Chon dia chi nguoi nhan de xem phi.</div>}
+            {previewFee && (
+              <div style={{ marginTop: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', fontSize: '13px' }}>
+                <div className="bill-row"><span>COD shop thu ho</span><strong>{Number(formData.cod_amount || 0).toLocaleString('vi-VN')} d</strong></div>
+                <div className="bill-row"><span>Shop tra ngay</span><strong>{Number(flow.sender_charge_now || 0).toLocaleString('vi-VN')} d</strong></div>
+                <div className="bill-row"><span>Nguoi nhan tra phi</span><strong>{Number(flow.receiver_fee_on_delivery || 0).toLocaleString('vi-VN')} d</strong></div>
+                <div className="bill-row total"><span>Shipper can thu khi giao</span><span>{Number(flow.cash_to_collect_on_delivery || 0).toLocaleString('vi-VN')} d</span></div>
               </div>
             )}
-            <div className="bill-row total">
-              <span>Tổng phí:</span>
-              <span>{previewFee ? Number(previewFee.total_fee).toLocaleString('vi-VN') : 0} đ</span>
-            </div>
-
-            <div className="promo-btn" style={{marginTop: '20px'}}>
-              <span>🎟️ Mã khuyến mãi từ GHN</span>
-              <FiChevronRight />
-            </div>
+            {previewFee && formData.payer_type === 'SENDER' && <div style={{ marginTop: '12px', fontSize: '12px', color: walletCheck.is_sufficient ? '#0f766e' : '#b91c1c' }}>So du kha dung: {Number(walletCheck.available_balance || 0).toLocaleString('vi-VN')} d. Sau tao don con: {Math.max(0, Number(walletCheck.available_balance || 0) - Number(flow.sender_charge_now || 0)).toLocaleString('vi-VN')} d.</div>}
+            {walletCheck.warning && <div style={{ marginTop: '10px', fontSize: '12px', color: walletCheck.is_sufficient ? '#0f766e' : '#b91c1c' }}>{walletCheck.warning}</div>}
+            <div className="promo-btn" style={{ marginTop: '20px' }}><span>Ma khuyen mai tu GHN</span><FiChevronRight /></div>
           </div>
-          
-          <div style={{padding: '0 24px 16px 24px'}}>
-            <select className="ghn-input" style={{width: '100%', background: 'var(--slate-50)'}}>
-              <option>Vui lòng chọn bên trả phí</option>
-              <option>Người gửi trả phí</option>
-              <option>Người nhận trả phí</option>
+
+          <div style={{ padding: '0 24px 16px 24px' }}>
+            <select className="ghn-input" style={{ width: '100%', background: 'var(--slate-50)' }} value={formData.payer_type} onChange={(e) => setFormData((p) => ({ ...p, payer_type: e.target.value }))}>
+              <option value="SENDER">Nguoi gui tra phi</option>
+              <option value="RECEIVER">Nguoi nhan tra phi</option>
             </select>
+            <p style={{ fontSize: '12px', color: 'var(--slate-500)', marginTop: '8px' }}>{formData.payer_type === 'RECEIVER' ? 'Phi ship se duoc thu them tu nguoi nhan khi giao.' : 'Phi ship se bi tru tu vi shop ngay khi tao don.'}</p>
           </div>
 
           <div className="bill-actions">
-            <button type="button" className="btn-draft">LƯU NHÁP</button>
-            <button type="submit" disabled={loadingSubmit || !previewFee} className="btn-create">
-               {loadingSubmit ? 'ĐANG XỬ LÝ...' : 'TẠO ĐƠN'}
-            </button>
+            <button type="button" className="btn-draft">LUU NHAP</button>
+            <button type="submit" disabled={loadingSubmit || loadingPreview || !previewFee} className="btn-create">{loadingSubmit ? 'DANG XU LY...' : 'TAO DON'}</button>
           </div>
         </div>
       </div>
 
-      {showStoreSelector && (
-        <div className="modal-overlay" onClick={() => setShowStoreSelector(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
-            <div className="modal-header">
-              <h2>Chọn kho lấy hàng</h2>
-              <button type="button" className="close-btn" onClick={() => setShowStoreSelector(false)}>&times;</button>
-            </div>
-            <div style={{display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '16px'}}>
-               {stores.map(s => (
-                 <div key={s.id_store} 
-                      onClick={() => handleSelectAnotherStore(String(s.id_store))}
-                      style={{padding: '12px', border: String(s.id_store) === String(formData.id_store) ? '2px solid var(--primary-color)' : '1px solid #ddd', borderRadius: '8px', cursor: 'pointer', background: String(s.id_store) === String(formData.id_store) ? '#fff5f0' : '#fff'}}>
-                    <div style={{fontWeight: 600, color: '#000'}}>{s.store_name}</div>
-                    <div style={{fontSize: '13px', color: '#555', marginTop: '4px'}}>{s.phone}</div>
-                    <div style={{fontSize: '13px', color: '#555'}}>{s.address}</div>
-                 </div>
-               ))}
-               <div style={{textAlign: 'center', marginTop: '8px'}}>
-                 <span className="edit-link" onClick={() => navigate('/stores')}>+ Thêm/quản lý kho mới</span>
-               </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {showStoreSelector && <div className="modal-overlay" onClick={() => setShowStoreSelector(false)}><div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}><div className="modal-header"><h2>Chon kho lay hang</h2><button type="button" className="close-btn" onClick={() => setShowStoreSelector(false)}>&times;</button></div><div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '16px' }}>{stores.map((s) => <div key={s.id_store} onClick={() => { setFormData((p) => ({ ...p, id_store: String(s.id_store) })); localStorage.setItem('default_store', String(s.id_store)); window.dispatchEvent(new Event('default_store_changed')); setShowStoreSelector(false); }} style={{ padding: '12px', border: String(s.id_store) === String(formData.id_store) ? '2px solid var(--primary-color)' : '1px solid #ddd', borderRadius: '8px', cursor: 'pointer' }}><div style={{ fontWeight: 600, color: '#000' }}>{s.store_name}</div><div style={{ fontSize: '13px', color: '#555', marginTop: '4px' }}>{s.phone}</div><div style={{ fontSize: '13px', color: '#555' }}>{s.address}</div></div>)}</div></div></div>}
 
-      {showAddressModal && (
-        <div className="modal-overlay" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
-            <div className="modal-header">
-              <h2>{addressModalType === 'SENDER' ? 'Sửa địa chỉ kho lấy hàng' : 'Nhập địa chỉ người nhận'}</h2>
-              <button type="button" className="close-btn" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}>&times;</button>
-            </div>
-            <div style={{display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '16px'}}>
-               <select className="ghn-input" value={selectedProv?.code || ''} onChange={handleProvChange}>
-                 <option value="">Chọn Tỉnh/Thành phố</option>
-                 {provinces.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
-               </select>
-               <select className="ghn-input" value={selectedDist?.code || ''} onChange={handleDistChange} disabled={!selectedProv}>
-                 <option value="">Chọn Quận/Huyện</option>
-                 {districts.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
-               </select>
-               <select className="ghn-input" value={selectedWard?.code || ''} onChange={e => setSelectedWard(wards.find(w=>w.code==e.target.value))} disabled={!selectedDist}>
-                 <option value="">Chọn Phường/Xã</option>
-                 {wards.map(w => <option key={w.code} value={w.code}>{w.name}</option>)}
-               </select>
-               <input type="text" className="ghn-input" value={streetNum} onChange={e => setStreetNum(e.target.value)} placeholder="Nhập số nhà, tên đường..." disabled={!selectedWard} />
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="tag-btn" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}>Hủy</button>
-              <button type="button" className="btn-create" onClick={saveAddress}>Xác nhận</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showAddressModal && <div className="modal-overlay" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}><div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}><div className="modal-header"><h2>{addressModalType === 'SENDER' ? 'Sua dia chi kho lay hang' : 'Nhap dia chi nguoi nhan'}</h2><button type="button" className="close-btn" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}>&times;</button></div><div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '16px' }}><select className="ghn-input" value={selectedProv?.code || ''} onChange={handleProvChange}><option value="">Chon Tinh/Thanh pho</option>{provinces.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}</select><select className="ghn-input" value={selectedDist?.code || ''} onChange={handleDistChange} disabled={!selectedProv}><option value="">Chon Quan/Huyen</option>{districts.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}</select><select className="ghn-input" value={selectedWard?.code || ''} onChange={(e) => setSelectedWard(wards.find((w) => String(w.code) === e.target.value))} disabled={!selectedDist}><option value="">Chon Phuong/Xa</option>{wards.map((w) => <option key={w.code} value={w.code}>{w.name}</option>)}</select><input type="text" className="ghn-input" value={streetNum} onChange={(e) => setStreetNum(e.target.value)} placeholder="Nhap so nha, ten duong..." disabled={!selectedWard} /></div><div className="modal-footer"><button type="button" className="tag-btn" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}>Huy</button><button type="button" className="btn-create" onClick={saveAddress}>Xac nhan</button></div></div></div>}
     </form>
   );
 };

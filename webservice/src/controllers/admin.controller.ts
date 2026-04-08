@@ -256,3 +256,31 @@ export const getServiceTypes = async (req: Request, res: Response): Promise<void
     res.status(500).json({ status: 'error', message: error.message });
   }
 };
+
+export const getShipperWardAssignments = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await adminService.getShipperWardAssignments();
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
+export const createShipperWardAssignment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await adminService.createShipperWardAssignment(req.body);
+    res.json({ status: 'success', data, message: 'Tao phan khu shipper thanh cong.' });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+export const deleteShipperWardAssignment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id_assignment = parseInt(String(req.params.id));
+    await adminService.deleteShipperWardAssignment(id_assignment);
+    res.json({ status: 'success', message: 'Da xoa phan khu shipper.' });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};

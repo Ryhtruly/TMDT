@@ -158,14 +158,19 @@ export const getCashflowReport = async (req: AuthRequest, res: Response): Promis
 // 8. Lấy danh sách Bưu cục
 export const getSpokes = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { pool } = require('../config/db');
-    const result = await pool.query(`
-      SELECT s.id_spoke, s.spoke_name, l.address, l.province, l.district
-      FROM spokes s
-      JOIN locations l ON s.id_location = l.id_location
-    `);
-    res.json({ status: 'success', data: result.rows });
+    const data = await shopService.getSpokes();
+    res.json({ status: 'success', data });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
+export const resolveDestArea = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { province, district } = req.query;
+    const data = await shopService.resolveDestinationArea(String(province || ''), String(district || ''));
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(404).json({ status: 'error', message: error.message });
   }
 };

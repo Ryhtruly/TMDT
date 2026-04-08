@@ -20,9 +20,10 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const response = await apiClient.post('/auth/login', { phone, password });
-      if (response && response.status === 'success') {
-        const checkRole = response.user_info?.roles?.includes('ADMIN') || response.user_info?.roles?.includes('STOCKKEEPER');
+      const response: any = await apiClient.post('/auth/login', { phone, password });
+      if (response?.status === 'success') {
+        const checkRole =
+          response.user_info?.roles?.includes('ADMIN') || response.user_info?.roles?.includes('STOCKKEEPER');
         if (!checkRole) {
           setError('Tài khoản không có quyền truy cập trang Quản Trị.');
           setIsLoading(false);

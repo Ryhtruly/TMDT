@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 const useAuth = () => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('shop_token'));

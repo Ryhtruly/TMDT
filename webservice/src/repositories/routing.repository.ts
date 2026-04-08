@@ -1,20 +1,26 @@
 import { pool } from '../config/db';
+import { extractProvinceDistrictFromAddress, isSameArea } from '../utils/location';
 
 export class RoutingRepository {
   // Tìm Spoke gốc từ Store (Store → Shop area → Spoke)
   async findOriginSpokeByStore(id_store: number) {
+    const storeRes = await pool.query('SELECT id_store, address FROM stores WHERE id_store = $1', [id_store]);
+    const store = storeRes.rows[0];
+    if (!store?.address) return null;
+
+    const parsed = extractProvinceDistrictFromAddress(store.address);
+    if (!parsed) return null;
+
     const result = await pool.query(`
-      SELECT s.id_spoke, sp.spoke_name, sp.id_hub, h.hub_name, sp.id_location as spoke_location
-      FROM stores st
-      JOIN shops sh ON st.id_shop = sh.id_shop
-      LEFT JOIN areas a ON a.id_spoke IS NOT NULL
-      LEFT JOIN spokes s ON a.id_spoke = s.id_spoke
-      LEFT JOIN spokes sp ON sp.id_spoke = s.id_spoke
-      LEFT JOIN hubs h ON sp.id_hub = h.id_hub
-      WHERE st.id_store = $1
-      LIMIT 1
-    `, [id_store]);
-    return result.rows[0] || null;
+      SELECT a.id_area, a.province, a.district, a.area_type,
+             s.id_spoke, s.spoke_name, s.id_hub, h.hub_name, s.id_location as spoke_location
+      FROM areas a
+      JOIN spokes s ON a.id_spoke = s.id_spoke
+      JOIN hubs h ON s.id_hub = h.id_hub
+      ORDER BY a.id_area ASC
+    `);
+
+    return result.rows.find((row) => isSameArea(row.province, row.district, parsed.province, parsed.district)) || null;
   }
 
   // Tìm Spoke đích từ Area

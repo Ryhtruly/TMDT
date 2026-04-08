@@ -83,6 +83,21 @@ export class ShopService {
     return await shopRepo.getStoresByShopId(shop.id_shop);
   }
 
+  async getSpokes() {
+    return await shopRepo.getAllSpokes();
+  }
+
+  async resolveDestinationArea(province: string, district: string) {
+    if (!province || !district) {
+      throw new Error('Thiáº¿u thÃ´ng tin tá»‰nh/thÃ nh vÃ  quáº­n/huyá»‡n.');
+    }
+
+    const area = await shopRepo.findAreaByProvinceDistrict(province, district);
+    if (!area) throw new Error(`ChÆ°a cáº¥u hÃ¬nh vÃ¹ng giao cho ${district}, ${province}.`);
+
+    return area;
+  }
+
   async addStore(id_user: number, storeData: any) {
     const shop = await shopRepo.findShopByUserId(id_user);
     if (!shop) throw new Error('Không tìm thấy Shop.');
@@ -140,7 +155,18 @@ export class ShopService {
     const wallet = await shopRepo.getWalletByUserId(id_user);
     if (!wallet) throw new Error('Ví tiền không tồn tại.');
     const history = await shopRepo.getTransactionHistory(wallet.id_wallet);
-    return { wallet, history };
+    const available_balance =
+      Number(wallet.balance || 0) +
+      Number(wallet.credit_limit || 0) -
+      Number(wallet.used_credit || 0);
+
+    return {
+      wallet: {
+        ...wallet,
+        available_balance,
+      },
+      history,
+    };
   }
 
   async topupWallet(id_user: number, amount: number) {

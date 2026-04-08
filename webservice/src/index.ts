@@ -9,18 +9,16 @@ import shopRoutes from './routes/shop.routes';
 import shipperRoutes from './routes/shipper.routes';
 import stockkeeperRoutes from './routes/stockkeeper.routes';
 import generalRoutes from './routes/general.routes';
+import { ensureSchema } from './db/ensureSchema';
 
-// Load biến môi trường
 dotenv.config();
 
 const app: Express = express();
 const port = process.env.PORT || 3000;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Đăng ký API Route Lõi
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/orders', orderRoutes);
@@ -29,32 +27,39 @@ app.use('/api/shipper', shipperRoutes);
 app.use('/api/stockkeeper', stockkeeperRoutes);
 app.use('/api', generalRoutes);
 
-// Base Route
-app.get('/', (req: Request, res: Response) => {
-  res.send('🚀 Kênh Server Web Service Logistics (QLKV) đang chạy thành công!');
+app.get('/', (_req: Request, res: Response) => {
+  res.send('Webservice logistics is running.');
 });
 
-// API Kiểm tra kết nối Database
-app.get('/api/test-db', async (req: Request, res: Response) => {
+app.get('/api/test-db', async (_req: Request, res: Response) => {
   try {
-    const result = await pool.query('SELECT NOW() as curent_time, version()');
+    const result = await pool.query('SELECT NOW() as current_time, version()');
     res.json({
       status: 'success',
-      message: 'Đã kết nối thành công tới Database QLKV!',
-      data: result.rows[0]
+      message: 'Connected to PostgreSQL successfully.',
+      data: result.rows[0],
     });
   } catch (error: any) {
-    console.error('Lỗi API test connection', error);
-    res.status(500).json({ 
-      status: 'error', 
-      message: 'Không thể kết nối DB', 
-      error: String(error) 
+    console.error('DB test endpoint failed', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Cannot connect to database',
+      error: String(error),
     });
   }
 });
 
-// Khởi động server
-app.listen(port, () => {
-  console.log(`[Server]: Đang lắng nghe tại cổng http://localhost:${port}`);
-  console.log(`[Test API]: Hãy truy cập http://localhost:${port}/api/test-db để kiểm tra DB`);
-});
+const bootstrap = async () => {
+  try {
+    await ensureSchema();
+    app.listen(port, () => {
+      console.log(`[Server]: listening on http://localhost:${port}`);
+      console.log(`[Test API]: http://localhost:${port}/api/test-db`);
+    });
+  } catch (error) {
+    console.error('[Bootstrap]: failed to ensure schema', error);
+    process.exit(1);
+  }
+};
+
+void bootstrap();

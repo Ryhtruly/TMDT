@@ -6,7 +6,8 @@ import {
   createSpoke, updateSpoke, deleteSpoke, setAreaCoverage,
   configPricing, getAllRoles, grantRole, revokeRole, setInsuranceConfig,
   getEmployees, deactivateEmployee, getAllShops, getAllOrders, getAllBags,
-  getPricingRules, getServiceTypes
+  getPricingRules, getServiceTypes, getShipperWardAssignments,
+  createShipperWardAssignment, deleteShipperWardAssignment
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -66,5 +67,8 @@ router.get('/bags', getAllBags);
 // Bảng giá & Dịch vụ
 router.get('/pricing-rules', getPricingRules);
 router.get('/service-types', getServiceTypes);
+router.get('/shipper-ward-assignments', getShipperWardAssignments);
+router.post('/shipper-ward-assignments', createShipperWardAssignment);
+router.delete('/shipper-ward-assignments/:id', deleteShipperWardAssignment);
 
 export default router;

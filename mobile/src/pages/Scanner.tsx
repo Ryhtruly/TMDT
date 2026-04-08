@@ -33,7 +33,6 @@ const Scanner = () => {
   const [loading, setLoading] = useState(false);
   const [failReason, setFailReason] = useState('');
   const [customReason, setCustomReason] = useState('');
-  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [evidencePreview, setEvidencePreview] = useState('');
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
@@ -124,7 +123,6 @@ const Scanner = () => {
   const handleEvidenceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setEvidenceFile(file);
     const reader = new FileReader();
     reader.onload = () => setEvidencePreview(reader.result as string);
     reader.readAsDataURL(file);
@@ -223,7 +221,6 @@ const Scanner = () => {
     setOrderInfo(null);
     setFailReason('');
     setCustomReason('');
-    setEvidenceFile(null);
     setEvidencePreview('');
     setResultData(null);
     stopScanner();
@@ -374,6 +371,11 @@ const Scanner = () => {
         <h3 className="sc-result-title">{isFailReport ? 'Đã ghi nhận thất bại' : 'Thành công!'}</h3>
         <div className="sc-result-code"><FiPackage size={14} /> {resultData?.tracking_code || scannedCode}</div>
         <div className="sc-result-msg">{resultData?.message}</div>
+        {Number(resultData?.total_cash_collected || 0) > 0 && (
+          <div className="sc-fee-warn">
+            Da thu tu khach: <strong>{Number(resultData.total_cash_collected).toLocaleString('vi-VN')}đ</strong>
+          </div>
+        )}
         {resultData?.redelivery_fee_charged > 0 && (
           <div className="sc-fee-warn">
             ⚠️ Phí giao lại lần {resultData?.attempt_no}: <strong>{Number(resultData.redelivery_fee_charged).toLocaleString('vi-VN')}đ</strong> đã trừ ví Shop

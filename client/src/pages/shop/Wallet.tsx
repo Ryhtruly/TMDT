@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FiCreditCard, FiDollarSign, FiPlus, FiTrash2 } from 'react-icons/fi';
+import { FiDollarSign, FiPlus, FiTrash2 } from 'react-icons/fi';
 import apiClient from '../../api/client';
 import './Wallet.css';
 
@@ -29,7 +29,10 @@ const Wallet = () => {
         apiClient.get('/shop/wallet') as any,
         apiClient.get('/shop/banks') as any
       ]);
-      if (walletRes?.status === 'success') setWallet(walletRes.data);
+      if (walletRes?.status === 'success') {
+        setWallet(walletRes.data.wallet);
+        setTransactions(walletRes.data.history || []);
+      }
       if (banksRes?.status === 'success') setBanks(banksRes.data || []);
     } catch (err) {
       console.error(err);

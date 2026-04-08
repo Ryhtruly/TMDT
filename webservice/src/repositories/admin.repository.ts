@@ -132,6 +132,8 @@ export class AdminRepository {
         e.id_employee, e.full_name, e.gender, e.email, e.citizen_id, e.home_address, e.dob,
         u.id_user, u.phone, u.is_active,
         COALESCE(json_agg(DISTINCT r.role_name) FILTER (WHERE r.role_name IS NOT NULL), '[]') AS roles,
+        MAX(ea.id_hub) AS id_hub,
+        MAX(ea.id_spoke) AS id_spoke,
         MAX(h.hub_name) AS hub_name,
         MAX(sp.spoke_name) AS spoke_name
       FROM employees e
@@ -215,5 +217,55 @@ export class AdminRepository {
       ORDER BY b.id_bag DESC
     `);
     return result.rows;
+  }
+
+  async getShipperWardAssignments() {
+    const result = await pool.query(`
+      SELECT swa.*,
+             u.phone as shipper_phone,
+             e.full_name as shipper_name,
+             s.spoke_name
+      FROM shipper_ward_assignments swa
+      JOIN users u ON u.id_user = swa.id_shipper
+      JOIN employees e ON e.id_user = u.id_user
+      JOIN spokes s ON s.id_spoke = swa.id_spoke
+      ORDER BY swa.id_spoke ASC, swa.priority ASC, swa.province ASC, swa.district ASC, swa.ward ASC NULLS LAST
+    `);
+    return result.rows;
+  }
+
+  async createShipperWardAssignment(data: {
+    id_shipper: number;
+    id_spoke: number;
+    province: string;
+    district: string;
+    ward?: string | null;
+    priority?: number;
+  }) {
+    const result = await pool.query(
+      `
+      INSERT INTO shipper_ward_assignments
+        (id_shipper, id_spoke, province, district, ward, priority, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+      RETURNING *
+    `,
+      [
+        data.id_shipper,
+        data.id_spoke,
+        data.province,
+        data.district,
+        data.ward || null,
+        data.priority || 100,
+      ]
+    );
+    return result.rows[0] || null;
+  }
+
+  async deleteShipperWardAssignment(id_assignment: number) {
+    const result = await pool.query(
+      'DELETE FROM shipper_ward_assignments WHERE id_assignment = $1 RETURNING id_assignment',
+      [id_assignment]
+    );
+    return result.rowCount ? true : false;
   }
 }

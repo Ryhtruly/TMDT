@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FiX, FiPackage, FiSearch, FiPrinter, FiXCircle } from 'react-icons/fi';
+import { FiX, FiSearch, FiPrinter, FiXCircle } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/client';
 import './Orders.css';
@@ -136,7 +136,7 @@ const Orders = () => {
                       <div style={{fontSize: '13px'}}>{o.receiver_phone}</div>
                    </td>
                    <td style={{fontWeight: 700, color: '#ff6b00'}}>{Number(o.cod_amount).toLocaleString()} đ</td>
-                   <td>{Number(o.fees_incurred).toLocaleString()} đ</td>
+                   <td>{Number(o.total_fee ?? (Number(o.shipping_fee || 0) + Number(o.insurance_fee || 0))).toLocaleString()} đ</td>
                    <td><span className={`status-badge ${o.status === 'GIAO THÀNH CÔNG' ? 'success' : o.status === 'ĐÃ HỦY' ? 'danger' : 'warning'}`}>{o.status}</span></td>
                 </tr>
               ))}

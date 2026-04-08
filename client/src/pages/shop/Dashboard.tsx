@@ -15,7 +15,7 @@ const Dashboard = () => {
     const fetchData = async () => {
       try {
         const [ordersRes, walletRes, cashflowRes] = await Promise.all([
-           apiClient.get('/orders').catch(() => null) as any,
+           apiClient.get('/shop/orders').catch(() => null) as any,
            apiClient.get('/shop/wallet').catch(() => null) as any,
            apiClient.get('/shop/cashflow').catch(() => null) as any
         ]);
@@ -141,7 +141,7 @@ const Dashboard = () => {
                       paddingAngle={5}
                       dataKey="value"
                     >
-                      {pieData.map((entry, index) => (
+                      {pieData.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>

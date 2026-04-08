@@ -254,6 +254,32 @@ export class AdminService {
     }
   }
 
+  async getShipperWardAssignments() {
+    return await adminRepo.getShipperWardAssignments();
+  }
+
+  async createShipperWardAssignment(data: any) {
+    const { id_shipper, id_spoke, province, district, ward, priority } = data;
+    if (!id_shipper || !id_spoke || !province || !district) {
+      throw new Error('Thieu thong tin bat buoc: id_shipper, id_spoke, province, district.');
+    }
+
+    return await adminRepo.createShipperWardAssignment({
+      id_shipper: parseInt(id_shipper),
+      id_spoke: parseInt(id_spoke),
+      province: String(province).trim(),
+      district: String(district).trim(),
+      ward: ward ? String(ward).trim() : null,
+      priority: priority ? parseInt(priority) : 100,
+    });
+  }
+
+  async deleteShipperWardAssignment(id_assignment: number) {
+    const deleted = await adminRepo.deleteShipperWardAssignment(id_assignment);
+    if (!deleted) throw new Error(`Khong tim thay assignment ID=${id_assignment}`);
+    return true;
+  }
+
   // --- CẤU HÌNH % PHÍ BẢO HIỂM ĐỘNG (dạng pricing_rule đặc biệt) ---
   // Lưu vào pricing_rules với route_type = 'INSURANCE' để tách biệt
   async setInsuranceConfig(threshold: number, rate_percent: number) {
