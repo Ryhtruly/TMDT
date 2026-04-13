@@ -1,202 +1,142 @@
 # Flow Explain
 
-## 1. `Đối Soát COD` trong giao diện admin đang làm gì
+- Cap nhat luc: `2026-04-14 01:36:56 +07:00`
 
-Trang này hiện là luồng `thanh toán COD cho shop`, không phải luồng kiểm tra shipper đã nộp đủ tiền cuối ngày.
+## 1. Flow shipper nop tien COD ve APP
 
-- File giao diện: `admin/src/pages/Payouts.tsx`
-- Route admin: `/payouts`
-- API dùng:
-  - `GET /cod/pending`
-  - `PUT /cod/:id/approve`
-- Backend:
-  - `webservice/src/routes/general.routes.ts`
-  - `webservice/src/services/general.service.ts`
-  - `webservice/src/repositories/general.repository.ts`
-- Bảng dữ liệu chính: `cod_payouts`
+Muc dich: kiem tra shipper co nop du tien mat da thu tu khach hay chua.
 
-Ý nghĩa nghiệp vụ hiện tại:
+Flow hien tai sau khi sua:
 
-- Shop gửi yêu cầu đối soát COD qua `POST /cod/request`
-- Hệ thống tạo một phiên `cod_payouts` với trạng thái `CHỜ DUYỆT`
-- Admin vào trang `Đối Soát COD` để xem danh sách chờ duyệt
-- Khi admin bấm `Duyệt`, backend chỉ đổi trạng thái payout sang `ĐÃ CHUYỂN`
+- Shipper giao thanh cong don hang.
+- Neu don co `cod_amount`, shipper dang giu tien COD cua shop.
+- Neu don co `payer_type = RECEIVER`, shipper giu them `shipping_fee + insurance_fee` do nguoi nhan tra.
+- Mobile shipper vao man `Doi Soat COD`, he thong tong hop cac don chua nop tien.
+- Shipper bam xac nhan nop tien, backend tao phieu `shipper_cod_reconciliations` voi trang thai `CHO_XAC_NHAN`.
+- Cac dong tien mat da thu trong `order_cash_collections` duoc gan `reconciliation_id`, nen khong con hien trong "tien dang giu" cua shipper.
+- `orders.shipper_reconciliation_id` chi con la cot lien ket phu/legacy, khong con la nguon duy nhat de tinh payout.
+- Admin vao man `Doi Soat COD -> Shipper nop tien`, kiem tien thuc te va bam `Xac nhan da thu`.
+- Khi admin xac nhan, phieu doi sang `DA_XAC_NHAN`.
 
-Kết luận:
+Bang chinh:
 
-- Đây là màn `admin duyệt chi tiền COD cho shop`
-- Không phải màn `đối chiếu shipper đã nộp đủ tiền của một ca/ngày giao`
+- `shipper_cod_reconciliations`
+- `orders.shipper_reconciliation_id`
+- `delivery_attempts`
 
-## 2. Phần kiểm tra shipper đã trả full tiền của 1 ngày giao hàng nằm ở đâu
+API chinh:
 
-Hiện tại phần này nằm ở `mobile + backend shipper`, chưa có màn admin riêng để duyệt/kiểm tra.
+- Mobile: `GET /shipper/cod-summary`
+- Mobile: `POST /shipper/cod-reconciliation`
+- Admin: `GET /admin/shipper-cod-reconciliations`
+- Admin: `PUT /admin/shipper-cod-reconciliations/:id/confirm`
 
-### Phía shipper
+## 2. Flow APP payout COD ve shop
 
-- File giao diện: `mobile/src/pages/CODReconciliation.tsx`
-- API:
-  - `GET /shipper/cod-summary`
-  - `POST /shipper/cod-reconciliation`
-- Route backend:
-  - `webservice/src/routes/shipper.routes.ts`
-- Logic:
-  - `webservice/src/services/shipper.service.ts`
-  - `webservice/src/repositories/shipper.repository.ts`
+Muc dich: tra tien COD cua shop ve tai khoan ngan hang sau khi APP da that su thu tien tu shipper.
 
-### Cách flow đang chạy
+Flow hien tai sau khi sua:
 
-- Sau khi shipper giao thành công:
-  - nếu đơn có `COD`, shipper đang giữ tiền COD
-  - nếu đơn có `payer_type = RECEIVER`, shipper còn giữ thêm cả phí ship/phí bảo hiểm thu từ người nhận
-- Màn `CODReconciliation` trên mobile sẽ tổng hợp:
-  - `total_cod`
-  - `total_receiver_fee`
-  - `total_cash_held`
-  - danh sách các đơn chưa nộp tiền
-- Khi shipper bấm xác nhận nộp tiền:
-  - backend tạo bản ghi trong bảng `shipper_cod_reconciliations`
-  - cập nhật `orders.shipper_reconciliation_id`
-  - từ đó các đơn này không còn nằm trong mục `tiền đang giữ`
+- Don hang phai o trang thai `GIAO THANH CONG`.
+- Don phai co `cod_amount > 0`.
+- Don phai co dong ledger `order_cash_collections.collection_type = COD`.
+- Dong COD phai co `reconciliation_id`.
+- Phieu shipper tuong ung cua dong COD phai co trang thai `DA_XAC_NHAN`.
+- Don chua tung nam trong `cod_payout_items`.
+- Shop vao man `COD va doi soat`, xem tong COD du dieu kien.
+- Shop chon tai khoan ngan hang va bam `Yeu cau Payout COD`.
+- Backend tao `cod_payouts` trang thai `CHO_DUYET` va tao cac dong `cod_payout_items`.
+- Admin vao `Doi Soat COD -> Payout cho shop`, kiem tra va bam `Xac nhan chuyen`.
+- Payout doi sang `DA_CHUYEN`, co `approved_at`, `approved_by`.
 
-### Điểm quan trọng
+Bang chinh:
 
-Hiện tại admin **chưa có** một trang riêng để:
+- `cod_payouts`
+- `cod_payout_items`
+- `bank_accounts`
 
-- xem danh sách các phiên `shipper_cod_reconciliations`
-- kiểm tra shipper đã nộp đủ tiền theo ngày/ca
-- so sánh số phải nộp với số thực nộp
-- xác nhận thủ kho/admin đã nhận tiền
+API chinh:
 
-Tức là:
+- Shop: `GET /cod/my-payouts`
+- Shop: `POST /cod/request`
+- Admin: `GET /cod/payouts`
+- Admin: `PUT /cod/:id/approve`
 
-- `Shop COD payout`: có màn admin
-- `Shipper nộp tiền cuối ca/ngày`: mới có phía shipper và backend, chưa có màn admin chuyên dụng
+## 3. Quy tac tien
 
-## 3. `Quản lý nhân sự` đang làm gì
+- `payer_type = SENDER`: shop bi tru phi ship/bao hiem tu vi khi tao don.
+- `payer_type = RECEIVER`: shop khong bi tru phi khi tao don, shipper thu phi ship/bao hiem tu nguoi nhan khi giao.
+- `cod_amount`: tien hang cua shop, shipper thu tu nguoi nhan khi giao thanh cong.
+- Shipper nop ve APP: `cod_amount + receiver_fee_amount`.
+- APP payout ve shop: chi payout `cod_amount`.
+- Phi payout mac dinh: `5.500d/lần`, tru vao tong COD payout, nen `net_amount = total_cod - service_fee`.
+- Phan `receiver_fee_amount` la doanh thu phi van chuyen cua APP, khong tra ve shop.
 
-Trang này là quản lý tài khoản nhân viên và phân quyền vận hành.
+## 4. Man hinh admin
 
-- File giao diện: `admin/src/pages/Employees.tsx`
-- Route admin: `/employees`
-- API chính:
-  - `GET /admin/employees`
-  - `POST /admin/employees`
-  - `PUT /admin/employees/:id/deactivate`
-  - `POST /admin/user-roles`
-  - `DELETE /admin/user-roles`
+Trang `admin / Doi Soat COD` hien da gom 2 phan:
 
-### Chức năng hiện có
+- `Shipper nop tien`: admin xac nhan tien mat shipper da nop ve APP.
+- `Payout cho shop`: admin xac nhan APP da chuyen tien COD ve ngan hang shop.
 
-- Xem danh sách nhân viên
-- Tìm kiếm theo tên, email, số điện thoại, role
-- Tạo mới nhân sự:
-  - tạo `users`
-  - gán `user_roles`
-  - tạo hồ sơ `employees`
-  - tạo phân công `employee_assignments`
-- Khóa tài khoản nhân viên
-- Cấp thêm role hoặc tước role
+Day la thay doi quan trong so voi ban cu. Ban cu chi co payout shop va shipper tu bam nop la coi nhu xong, khong co buoc admin xac nhan tien that.
 
-### Ý nghĩa của `Hub / Spoke`
+## 5. Man hinh shop
 
-- Nhân viên có thể được gán vào `hub` hoặc `spoke`
-- Với `shipper`, hệ thống thực tế cần `id_spoke`
-- Với `stockkeeper`, có thể làm việc ở `hub` hoặc `spoke` tùy phân công
+Trang `client / COD va doi soat` hien da tach ro:
 
-### Bảng dữ liệu liên quan
+- So du vi tra phi ship.
+- COD du dieu kien payout.
+- Danh sach don COD du dieu kien.
+- Lich su payout COD.
+- Tai khoan ngan hang thu huong.
 
-- `users`
-- `user_roles`
-- `employees`
-- `employee_assignments`
+Nut payout khong con goi nham `shop/wallet/withdraw`. No goi dung `POST /cod/request`.
 
-## 4. `Kiểm toán và lương` là gì
+## 6. Gioi han hien tai
 
-Trang này gom 2 khối khác nhau:
+- Payout dang la flow admin duyet thu cong, chua co cron tu dong theo lich.
+- Chua co flow "admin tu choi" phieu shipper hoac payout shop.
+- Chua co bang luu bang chung anh/ma bien nhan khi admin nhan tien mat.
+- Cac payout seed cu trong DB da duoc chuan hoa trang thai, nhung khong co `cod_payout_items` chi tiet vi la du lieu mau cu.
 
-- `Quyết toán lương shipper`
-- `Nhật ký kiểm toán`
+## 7. Cap nhat flow thanh toan phi ship tien mat
 
-- File giao diện: `admin/src/pages/AuditAndSalary.tsx`
-- Route admin: `/audit-salary`
+Muc dich: cho shop chon tra phi ship bang vi hoac bang tien mat, nhung doi soat van dung tien that shipper dang giu.
 
-### 4.1. Quyết toán lương shipper
+Quy tac moi:
 
-API:
+- `payer_type = SENDER` va `fee_payment_method = WALLET`: shop bi tru `shipping_fee + insurance_fee` tu vi ngay khi tao don.
+- `payer_type = SENDER` va `fee_payment_method = CASH`: shop khong bi tru vi, shipper thu `shipping_fee + insurance_fee` tu shop luc lay hang.
+- `payer_type = RECEIVER`: `fee_payment_method` duoc ep ve `CASH`, shipper thu `shipping_fee + insurance_fee` tu nguoi nhan luc giao.
+- Neu co `cod_amount`, COD luon la tien cua shop ma shipper thu tu nguoi nhan luc giao thanh cong.
+- Shipper nop ve APP = tat ca tien mat da thu: COD + phi shop tra tien mat + phi nguoi nhan tra tien mat.
+- APP payout ve shop = chi dong `COD` da duoc admin xac nhan, khong payout phi ship.
 
-- `POST /admin/shipper-salary`
+Bang moi/bo sung:
 
-Backend:
+- `orders.fee_payment_method`: `WALLET` hoac `CASH`.
+- `order_cash_collections`: so cai cac khoan tien mat can thu/da thu theo tung don.
+- Moi dong ledger co `collection_type`, `payer_party`, `collection_stage`, `expected_amount`, `collected_amount`, `collected_by_shipper`, `reconciliation_id`.
 
-- `webservice/src/services/general.service.ts`
-- `webservice/src/repositories/general.repository.ts`
+Flow tao don:
 
-Ý nghĩa hiện tại:
+- Client gui them `fee_payment_method`.
+- Backend tao order va sinh cac dong `order_cash_collections` tu dau.
+- Neu shop tra vi, backend tru vi va khong tao dong tien mat phi ship.
+- Neu shop tra tien mat, backend tao dong `SHIPPING_FEE/INSURANCE_FEE` o stage `PICKUP`.
+- Neu nguoi nhan tra phi, backend tao dong `SHIPPING_FEE/INSURANCE_FEE` o stage `DELIVERY`.
+- Neu co COD, backend tao dong `COD` o stage `DELIVERY`.
 
-- Admin nhập `id shipper` và `tháng`
-- Hệ thống tính:
-  - `lương cứng`
-  - `hoa hồng theo số đơn giao thành công`
-  - `phạt`
-- Sau đó ghi vào bảng `shipper_incomes`
+Flow shipper:
 
-Theo code hiện tại:
+- Khi shipper xac nhan lay hang, backend mark cac dong `PICKUP` la da thu.
+- Khi shipper giao thanh cong, backend mark cac dong `DELIVERY` la da thu.
+- Man mobile `Doi Soat Tien Mat` hien tong tien mat shipper chua nop, gom COD va moi loai phi thu tien mat.
+- Khi shipper nop tien, backend tao `shipper_cod_reconciliations` va gan `reconciliation_id` vao cac dong ledger da thu.
 
-- `base_salary` đang nhập cứng từ UI là `5,000,000`
-- `penalty` hiện đang để `0`
-- `hoa hồng` tính theo bậc số đơn thành công trong tháng
+Flow payout shop:
 
-Nói ngắn gọn:
-
-- Đây là màn `chốt lương shipper`
-- Chưa phải hệ thống payroll hoàn chỉnh nhiều rule
-
-### 4.2. Nhật ký kiểm toán
-
-API:
-
-- `GET /admin/audit-log`
-
-Bảng dữ liệu:
-
-- `audit_log`
-
-Ý nghĩa:
-
-- lưu các hành động quản trị/hệ thống
-- theo dõi ai đã tạo, sửa, cập nhật dữ liệu gì
-- hỗ trợ truy vết khi có sai lệch vận hành hoặc tài chính
-
-Trang này hiện hiển thị:
-
-- `action`
-- `object_type`
-- `id_actor`
-- `payload_json`
-- `created_at`
-
-## 5. Tổng kết thực trạng toàn flow
-
-### Đã có
-
-- Admin duyệt payout COD cho shop
-- Shipper xem tiền đang giữ và tự xác nhận nộp tiền
-- Quản lý nhân sự và phân quyền
-- Quyết toán lương shipper cơ bản
-- Audit log cơ bản
-
-### Chưa có hoặc chưa hoàn chỉnh
-
-- Chưa có màn admin riêng để kiểm tra shipper đã nộp đủ tiền theo ngày/ca
-- Chưa có bước admin/thủ kho xác nhận thực thu cho từng phiên `shipper_cod_reconciliations`
-- Trang `Đối Soát COD` hiện chưa phải là đối soát shipper, mà là payout cho shop
-- Màn `Quyết toán lương` còn khá cơ bản, chưa gắn sâu với đối soát COD hay công nợ thực tế
-
-## 6. Kết luận ngắn
-
-Nếu nhìn đúng theo toàn bộ project hiện tại:
-
-- `Đối Soát COD` bên admin = `chi tiền COD cho shop`
-- `Shipper đã nộp đủ tiền chưa` = hiện xem được ở flow shipper/mobile + backend, nhưng chưa có màn admin quản trị riêng
-- `Quản lý nhân sự` = quản lý tài khoản, role, hồ sơ, nơi làm việc hub/spoke
-- `Kiểm toán và lương` = xem audit log và chốt lương shipper theo công thức cơ bản
+- Shop chi thay COD du dieu kien payout khi dong ledger `collection_type = COD` da co `reconciliation_id`.
+- Phieu shipper tuong ung phai duoc admin xac nhan `DA_XAC_NHAN`.
+- Neu order chi moi thu phi ship tien mat luc lay hang nhung chua giao/COD chua thu, shop chua the payout COD.

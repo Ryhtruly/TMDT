@@ -86,6 +86,97 @@ np- Bo sung co che resolve `id_dest_area` tu dia chi nguoi nhan truoc khi previe
 - Du lieu `areas` hien van con it, nen dia chi nhan khong nam trong `areas` thi van khong tao duoc don.
 
 
+# Change Log
+
+- Thoi gian cap nhat: `2026-04-13 20:09:32 +07:00`
+
+## Noi dung da sua
+
+- Hoan thien flow shipper nop tien COD ve APP:
+  - `POST /shipper/cod-reconciliation` tao phieu trang thai `CHO_XAC_NHAN`.
+  - Admin phai xac nhan phieu bang `PUT /admin/shipper-cod-reconciliations/:id/confirm`.
+  - Chi phieu da xac nhan moi duoc dung de payout COD cho shop.
+- Hoan thien flow APP payout COD ve shop:
+  - Them bang `cod_payout_items` de gan payout voi tung don hang.
+  - Them cac cot `id_bank`, `net_amount`, `created_at`, `approved_at`, `approved_by`, `admin_note` cho `cod_payouts`.
+  - Shop tao yeu cau payout qua `POST /cod/request`.
+  - Admin xac nhan da chuyen tien qua `PUT /cod/:id/approve`.
+- Sua man admin `Doi Soat COD` thanh 2 phan:
+  - `Shipper nop tien`
+  - `Payout cho shop`
+- Sua man shop `COD va doi soat`:
+  - Khong con goi nham `shop/wallet/withdraw`.
+  - Hien COD du dieu kien, phi payout, so tien thuc nhan, lich su payout va ngan hang nhan tien.
+- Cap nhat `Flow_explane.md` theo flow moi.
+
+## Kiem tra da thuc hien
+
+- Build thanh cong `webservice`.
+- Build thanh cong `admin`.
+- Build thanh cong `client`.
+- Build thanh cong `mobile`.
+- Chay migration schema truc tiep tren PostgreSQL `TMDT`.
+- Kiem tra DB thay co:
+  - `shipper_cod_reconciliations.confirmed_at`
+  - `shipper_cod_reconciliations.confirmed_by`
+  - `cod_payouts.id_bank`
+  - `cod_payouts.net_amount`
+  - `cod_payout_items`
+
+## Ghi chu
+
+- Hien tai co 2 phieu shipper dang `CHO_XAC_NHAN`, tong tien mat `772.000d`; admin can xac nhan truoc khi COD cua cac don do du dieu kien payout cho shop.
+- Flow payout hien la admin duyet thu cong, chua co lich tu dong theo ngay/thu.
+
+
+# Change Log
+
+- Thoi gian cap nhat: `2026-04-14`
+
+## Noi dung da sua
+
+- Sua nut `Yeu Cau Payout COD` trong man shop de khong bi disable im lang khi shop chua co tai khoan ngan hang.
+- Neu chua co ngan hang, he thong se bao ro COD duoc chuyen ve tai khoan ngan hang lien ket va mo form them ngan hang.
+- Neu da co ngan hang, he thong mo modal xac nhan payout va tu chon ngan hang dau tien khi shop chi co 1 tai khoan.
+- Them ghi chu tren UI: COD payout chuyen ve ngan hang, khong cong vao vi tra phi ship.
+
+## Kiem tra da thuc hien
+
+- Build thanh cong `client`.
+- Kiem tra DB shop `HNSS`: hien chua co tai khoan ngan hang lien ket (`bank_count = 0`), nen day la ly do nut truoc do bam khong co phan hoi.
+
+
+# Change Log
+
+- Thoi gian cap nhat: `2026-04-14`
+
+## Noi dung da sua
+
+- Sua dieu kien lay COD du dieu kien payout de khong phu thuoc chuoi status tieng Viet co dau.
+- Backend nay xac dinh COD du dieu kien dua tren:
+  - don co `shipper_reconciliation_id`
+  - phieu shipper reconciliation co `status = DA_XAC_NHAN`
+  - don co `cod_amount > 0`
+  - don chua nam trong payout khac
+
+## Kiem tra da thuc hien
+
+- Build thanh cong `webservice`.
+- Build thanh cong `client`.
+- Kiem tra DB don `QLKV0458471134`:
+  - shop `HNSS`
+  - COD `1.100.000d`
+  - reconciliation `DA_XAC_NHAN`
+  - chua nam trong payout
+- Tao lai payout bi thieu cho shop `HNSS`:
+  - `PAY-10`
+  - `total_cod = 1.100.000d`
+  - `service_fee = 5.500d`
+  - `net_amount = 1.094.500d`
+  - ngan hang `MB bank - 1122334455`
+  - trang thai `CHO_DUYET`
+
+
 
 Đã làm được, và hướng này chịu tải ổn hơn kiểu để shipper tự bốc đơn theo cả quận.
 
@@ -160,6 +251,34 @@ Nếu muốn, mình có thể sửa thêm một lớp an toàn nữa:
 - shipper nào đã có rule phường thì chỉ thấy đúng vùng mình phụ trách
 - shipper chưa có rule nào thì không được fallback thấy toàn spoke nữa
 - hoặc chỉ admin mới bật `fallback spoke pool` khi thiếu người.
+
+---
+
+## Cap nhat 2026-04-14 01:36:56 +07:00 - Thanh toan phi ship bang tien mat
+
+Noi dung da sua:
+
+- Them `orders.fee_payment_method` de tach `WALLET` va `CASH`.
+- Them bang `order_cash_collections` lam so cai tien mat cho tung don.
+- Tao don gio co 3 flow tien:
+  - shop tra phi bang vi: tru wallet ngay khi tao don
+  - shop tra phi bang tien mat: shipper thu phi luc lay hang
+  - nguoi nhan tra phi: shipper thu phi luc giao
+- COD luon duoc ghi rieng thanh dong `COD` trong ledger.
+- Shipper doi soat theo tong tien mat da thu: COD + phi ship/bao hiem tien mat.
+- Payout cho shop chi lay cac dong `COD` da duoc admin xac nhan shipper da nop tien, khong payout phi ship.
+- Backfill DB cho don cu co COD/phi nguoi nhan de khong mat du lieu doi soat.
+
+Man hinh da cap nhat:
+
+- Client tao don: them lua chon `Tru vi shop` hoac `Shop tra tien mat cho shipper khi lay hang`.
+- Mobile shipper: doi thanh `Doi Soat Tien Mat`, hien ca COD va phi tien mat.
+- Admin doi soat COD: cot phi doi thanh `Phi tien mat` de dung voi ca shop-tra-tien-mat va nguoi-nhan-tra-phi.
+
+Kiem tra:
+
+- `npm run build` thanh cong cho `webservice`, `client`, `mobile`, `admin`.
+- Da chay `ensureSchema()` tren PostgreSQL va backfill ledger thanh cong.
 Mình đã check DB trực tiếp:
 
 - đơn `41` giao tới `Phường Tân Định`

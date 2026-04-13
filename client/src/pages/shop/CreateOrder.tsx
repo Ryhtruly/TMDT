@@ -38,6 +38,7 @@ const CreateOrder = () => {
     receiver_phone: '',
     receiver_address: '',
     payer_type: 'SENDER',
+    fee_payment_method: 'WALLET',
     id_service_type: Number(paramType),
     weight: paramType === '2' ? 20000 : 200,
     item_value: 0,
@@ -57,6 +58,12 @@ const CreateOrder = () => {
       weight: paramType === '2' ? 20000 : prev.weight === 20000 ? 200 : prev.weight,
     }));
   }, [paramType]);
+
+  useEffect(() => {
+    if (formData.payer_type === 'RECEIVER' && formData.fee_payment_method !== 'CASH') {
+      setFormData((prev) => ({ ...prev, fee_payment_method: 'CASH' }));
+    }
+  }, [formData.payer_type, formData.fee_payment_method]);
 
   useEffect(() => {
     const load = async () => {
@@ -159,6 +166,7 @@ const CreateOrder = () => {
           id_store: Number(formData.id_store),
           id_dest_area: idDestArea,
           payer_type: formData.payer_type,
+          fee_payment_method: formData.fee_payment_method,
           id_service_type: Number(formData.id_service_type),
           weight: Number(formData.weight),
           item_value: Number(formData.item_value || 0),
@@ -195,12 +203,19 @@ const CreateOrder = () => {
       window.dispatchEvent(new Event('wallet_updated'));
       const fee = res?.data?.fee_summary || {};
       const chargedNow = Number(fee.sender_charged_now || 0);
-      const cashCollect = Number(fee.cash_to_collect_on_delivery || 0);
-      alert(
-        formData.payer_type === 'RECEIVER'
-          ? `Tao don thanh cong.\nShipper se thu ${cashCollect.toLocaleString('vi-VN')} d khi giao.`
-          : `Tao don thanh cong.\nDa tru ${chargedNow.toLocaleString('vi-VN')} d tu vi shop.`
-      );
+      const senderCash = Number(fee.sender_cash_fee_on_pickup || 0);
+      const deliveryCash = Number(fee.cash_to_collect_on_delivery || 0);
+      let message = 'Tao don thanh cong.';
+      if (formData.payer_type === 'RECEIVER') {
+        message += `\nShipper se thu ${deliveryCash.toLocaleString('vi-VN')} d tu nguoi nhan khi giao.`;
+      } else if (formData.fee_payment_method === 'CASH') {
+        message += `\nShipper se thu ${senderCash.toLocaleString('vi-VN')} d tien phi tu shop khi lay hang.`;
+        if (deliveryCash > 0) message += `\nKhi giao, shipper thu them COD ${deliveryCash.toLocaleString('vi-VN')} d tu nguoi nhan.`;
+      } else {
+        message += `\nDa tru ${chargedNow.toLocaleString('vi-VN')} d tu vi shop.`;
+        if (deliveryCash > 0) message += `\nKhi giao, shipper thu COD ${deliveryCash.toLocaleString('vi-VN')} d tu nguoi nhan.`;
+      }
+      alert(message);
       navigate('/orders');
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Co loi xay ra.');
@@ -324,22 +339,41 @@ const CreateOrder = () => {
             {previewFee && (
               <div style={{ marginTop: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', fontSize: '13px' }}>
                 <div className="bill-row"><span>COD shop thu ho</span><strong>{Number(formData.cod_amount || 0).toLocaleString('vi-VN')} d</strong></div>
-                <div className="bill-row"><span>Shop tra ngay</span><strong>{Number(flow.sender_charge_now || 0).toLocaleString('vi-VN')} d</strong></div>
+                <div className="bill-row"><span>Shop tra bang vi</span><strong>{Number(flow.sender_charge_now || 0).toLocaleString('vi-VN')} d</strong></div>
+                <div className="bill-row"><span>Shop tra tien mat luc lay</span><strong>{Number(flow.sender_cash_fee_on_pickup || 0).toLocaleString('vi-VN')} d</strong></div>
                 <div className="bill-row"><span>Nguoi nhan tra phi</span><strong>{Number(flow.receiver_fee_on_delivery || 0).toLocaleString('vi-VN')} d</strong></div>
                 <div className="bill-row total"><span>Shipper can thu khi giao</span><span>{Number(flow.cash_to_collect_on_delivery || 0).toLocaleString('vi-VN')} d</span></div>
+                <div className="bill-row total"><span>Tong tien mat shipper nop</span><span>{Number(flow.total_cash_expected_from_shipper || 0).toLocaleString('vi-VN')} d</span></div>
               </div>
             )}
-            {previewFee && formData.payer_type === 'SENDER' && <div style={{ marginTop: '12px', fontSize: '12px', color: walletCheck.is_sufficient ? '#0f766e' : '#b91c1c' }}>So du kha dung: {Number(walletCheck.available_balance || 0).toLocaleString('vi-VN')} d. Sau tao don con: {Math.max(0, Number(walletCheck.available_balance || 0) - Number(flow.sender_charge_now || 0)).toLocaleString('vi-VN')} d.</div>}
+            {previewFee && formData.payer_type === 'SENDER' && formData.fee_payment_method === 'WALLET' && <div style={{ marginTop: '12px', fontSize: '12px', color: walletCheck.is_sufficient ? '#0f766e' : '#b91c1c' }}>So du kha dung: {Number(walletCheck.available_balance || 0).toLocaleString('vi-VN')} d. Sau tao don con: {Math.max(0, Number(walletCheck.available_balance || 0) - Number(flow.sender_charge_now || 0)).toLocaleString('vi-VN')} d.</div>}
             {walletCheck.warning && <div style={{ marginTop: '10px', fontSize: '12px', color: walletCheck.is_sufficient ? '#0f766e' : '#b91c1c' }}>{walletCheck.warning}</div>}
             <div className="promo-btn" style={{ marginTop: '20px' }}><span>Ma khuyen mai tu GHN</span><FiChevronRight /></div>
           </div>
 
           <div style={{ padding: '0 24px 16px 24px' }}>
-            <select className="ghn-input" style={{ width: '100%', background: 'var(--slate-50)' }} value={formData.payer_type} onChange={(e) => setFormData((p) => ({ ...p, payer_type: e.target.value }))}>
+            <select className="ghn-input" style={{ width: '100%', background: 'var(--slate-50)' }} value={formData.payer_type} onChange={(e) => setFormData((p) => ({ ...p, payer_type: e.target.value, fee_payment_method: e.target.value === 'RECEIVER' ? 'CASH' : p.fee_payment_method }))}>
               <option value="SENDER">Nguoi gui tra phi</option>
               <option value="RECEIVER">Nguoi nhan tra phi</option>
             </select>
-            <p style={{ fontSize: '12px', color: 'var(--slate-500)', marginTop: '8px' }}>{formData.payer_type === 'RECEIVER' ? 'Phi ship se duoc thu them tu nguoi nhan khi giao.' : 'Phi ship se bi tru tu vi shop ngay khi tao don.'}</p>
+            {formData.payer_type === 'SENDER' && (
+              <select
+                className="ghn-input"
+                style={{ width: '100%', background: 'var(--slate-50)', marginTop: '10px' }}
+                value={formData.fee_payment_method}
+                onChange={(e) => setFormData((p) => ({ ...p, fee_payment_method: e.target.value }))}
+              >
+                <option value="WALLET">Tru vi shop khi tao don</option>
+                <option value="CASH">Shop tra tien mat cho shipper khi lay hang</option>
+              </select>
+            )}
+            <p style={{ fontSize: '12px', color: 'var(--slate-500)', marginTop: '8px' }}>
+              {formData.payer_type === 'RECEIVER'
+                ? 'Phi ship se duoc thu them tu nguoi nhan khi giao.'
+                : formData.fee_payment_method === 'CASH'
+                  ? 'Phi ship khong tru vi; shipper thu tien mat tu shop luc lay hang va doi soat ve APP.'
+                  : 'Phi ship se bi tru tu vi shop ngay khi tao don.'}
+            </p>
           </div>
 
           <div className="bill-actions">

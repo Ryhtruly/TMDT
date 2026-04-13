@@ -1,26 +1,41 @@
-import { useState, useEffect } from 'react';
-import { FiDollarSign, FiClock, FiCheckCircle } from 'react-icons/fi';
+import { useEffect, useState } from 'react';
+import { FiCheckCircle, FiClock, FiDollarSign, FiTruck } from 'react-icons/fi';
 import apiClient from '../api/client';
 
-const Payouts = () => {
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved'>('pending');
-  const [pending, setPending] = useState<any[]>([]);
-  const [approved, setApproved] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const pageSize = 15;
+const money = (value: any) => `${Number(value || 0).toLocaleString('vi-VN')} d`;
+const dateTime = (value: any) => (value ? new Date(value).toLocaleString('vi-VN') : '-');
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+const statusStyle = (status: string) => {
+  if (status === 'DA_XAC_NHAN' || status === 'DA_CHUYEN') return { background: '#d1fae5', color: '#047857' };
+  if (status === 'CHO_XAC_NHAN' || status === 'CHO_DUYET') return { background: '#fef9c3', color: '#854d0e' };
+  return { background: '#e5e7eb', color: '#374151' };
+};
+
+const statusText = (status: string) => {
+  const map: Record<string, string> = {
+    CHO_XAC_NHAN: 'Cho admin xac nhan',
+    DA_XAC_NHAN: 'Da xac nhan tien',
+    CHO_DUYET: 'Cho chuyen shop',
+    DA_CHUYEN: 'Da chuyen shop',
+  };
+  return map[status] || status || '-';
+};
+
+const Payouts = () => {
+  const [activeFlow, setActiveFlow] = useState<'shipper' | 'shop'>('shipper');
+  const [shipperRows, setShipperRows] = useState<any[]>([]);
+  const [payoutRows, setPayoutRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get('/cod/pending');
-      const all = res.data || [];
-      setPending(all.filter((p: any) => p.status !== 'ĐÃ CHUYỂN' && p.status !== 'APPROVED'));
-      setApproved(all.filter((p: any) => p.status === 'ĐÃ CHUYỂN' || p.status === 'APPROVED'));
+      const [shipperRes, payoutRes]: any[] = await Promise.all([
+        apiClient.get('/admin/shipper-cod-reconciliations'),
+        apiClient.get('/cod/payouts'),
+      ]);
+      setShipperRows(shipperRes?.data || []);
+      setPayoutRows(payoutRes?.data || []);
     } catch (error) {
       console.error(error);
     } finally {
@@ -28,147 +43,196 @@ const Payouts = () => {
     }
   };
 
-  const approvePayout = async (id: number, shopName: string) => {
-    if (!window.confirm(`Xác nhận chuyển COD cho ${shopName}?`)) return;
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const confirmShipperCash = async (row: any) => {
+    if (!window.confirm(`Xac nhan da nhan ${money(row.total_cash)} tu shipper ${row.shipper_name || row.shipper_phone}?`)) return;
     try {
-      await apiClient.put(`/cod/${id}/approve`);
+      await apiClient.put(`/admin/shipper-cod-reconciliations/${row.id_reconciliation}/confirm`, {
+        admin_note: 'Admin da nhan du tien mat tu shipper',
+      });
       fetchData();
     } catch (error: any) {
-      alert('Lỗi: ' + (error.response?.data?.message || error.message));
+      alert(error.response?.data?.message || error.message);
     }
   };
 
-  const currentList = activeTab === 'pending' ? pending : approved;
-  const totalPages = Math.ceil(currentList.length / pageSize);
-  const paged = currentList.slice((page - 1) * pageSize, page * pageSize);
+  const approveShopPayout = async (row: any) => {
+    if (!window.confirm(`Xac nhan da chuyen ${money(row.net_amount)} ve ngan hang cua ${row.shop_name || row.phone}?`)) return;
+    try {
+      await apiClient.put(`/cod/${row.id_payout}/approve`, {
+        admin_note: 'Admin da chuyen tien COD ve tai khoan ngan hang shop',
+      });
+      fetchData();
+    } catch (error: any) {
+      alert(error.response?.data?.message || error.message);
+    }
+  };
 
-  const totalPendingAmount = pending.reduce((sum, p) => sum + parseFloat(p.total_cod || p.amount || 0), 0);
+  const pendingCash = shipperRows.filter((row) => row.status === 'CHO_XAC_NHAN');
+  const confirmedCash = shipperRows.filter((row) => row.status === 'DA_XAC_NHAN');
+  const pendingPayouts = payoutRows.filter((row) => row.status === 'CHO_DUYET');
+  const paidPayouts = payoutRows.filter((row) => row.status === 'DA_CHUYEN');
+  const pendingCashAmount = pendingCash.reduce((sum, row) => sum + Number(row.total_cash || 0), 0);
+  const pendingPayoutAmount = pendingPayouts.reduce((sum, row) => sum + Number(row.net_amount || 0), 0);
 
   return (
     <div className="payouts-page">
       <div className="page-header d-flex justify-between">
         <div>
-          <h1 className="page-title">Đối Soát COD — Thanh Toán Shop</h1>
-          <p className="page-subtitle">Duyệt và theo dõi chi trả tiền COD cho đối tác.</p>
+          <h1 className="page-title">Doi Soat COD</h1>
+          <p className="page-subtitle">Quan ly 2 buoc: shipper nop tien ve APP, sau do APP chuyen COD ve shop.</p>
         </div>
+        <button className="btn-outline" onClick={fetchData}>Lam moi</button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '24px' }}>
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 24 }}>
         <div className="stat-card">
           <div className="stat-card-top">
-            <h3 className="stat-title">Chờ duyệt</h3>
-            <div className="stat-icon-soft" style={{ backgroundColor: '#fef9c3', color: '#854d0e' }}><FiClock /></div>
+            <h3 className="stat-title">Shipper cho xac nhan</h3>
+            <div className="stat-icon-soft" style={{ backgroundColor: '#fef9c3', color: '#854d0e' }}><FiTruck /></div>
           </div>
           <div className="stat-card-body">
-            <div className="stat-value">{pending.length}</div>
-            <p className="stat-desc">phiên đang chờ</p>
+            <div className="stat-value">{pendingCash.length}</div>
+            <p className="stat-desc">{money(pendingCashAmount)}</p>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
-            <h3 className="stat-title">Tổng COD chờ duyệt</h3>
-            <div className="stat-icon-soft" style={{ backgroundColor: '#fee2e2', color: '#b91c1c' }}><FiDollarSign /></div>
-          </div>
-          <div className="stat-card-body">
-            <div className="stat-value">{totalPendingAmount.toLocaleString('vi-VN')}₫</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card-top">
-            <h3 className="stat-title">Đã duyệt</h3>
+            <h3 className="stat-title">Da thu tu shipper</h3>
             <div className="stat-icon-soft" style={{ backgroundColor: '#d1fae5', color: '#047857' }}><FiCheckCircle /></div>
           </div>
           <div className="stat-card-body">
-            <div className="stat-value">{approved.length}</div>
-            <p className="stat-desc">phiên đã thanh toán</p>
+            <div className="stat-value">{confirmedCash.length}</div>
+            <p className="stat-desc">phieu da xac nhan</p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-top">
+            <h3 className="stat-title">Shop cho payout</h3>
+            <div className="stat-icon-soft" style={{ backgroundColor: '#fee2e2', color: '#b91c1c' }}><FiDollarSign /></div>
+          </div>
+          <div className="stat-card-body">
+            <div className="stat-value">{pendingPayouts.length}</div>
+            <p className="stat-desc">{money(pendingPayoutAmount)}</p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-top">
+            <h3 className="stat-title">Da chuyen shop</h3>
+            <div className="stat-icon-soft" style={{ backgroundColor: '#dbeafe', color: '#1d4ed8' }}><FiClock /></div>
+          </div>
+          <div className="stat-card-body">
+            <div className="stat-value">{paidPayouts.length}</div>
+            <p className="stat-desc">phien payout</p>
           </div>
         </div>
       </div>
 
       <div className="admin-card">
         <div className="tabs-header">
-          <button className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => { setActiveTab('pending'); setPage(1); }}>
-            <FiClock className="tab-icon" /> Chờ Duyệt ({pending.length})
+          <button className={`tab-btn ${activeFlow === 'shipper' ? 'active' : ''}`} onClick={() => setActiveFlow('shipper')}>
+            <FiTruck className="tab-icon" /> Shipper nop tien ({pendingCash.length})
           </button>
-          <button className={`tab-btn ${activeTab === 'approved' ? 'active' : ''}`} onClick={() => { setActiveTab('approved'); setPage(1); }}>
-            <FiCheckCircle className="tab-icon" /> Đã Thanh Toán ({approved.length})
+          <button className={`tab-btn ${activeFlow === 'shop' ? 'active' : ''}`} onClick={() => setActiveFlow('shop')}>
+            <FiDollarSign className="tab-icon" /> Payout cho shop ({pendingPayouts.length})
           </button>
         </div>
 
         <div className="table-container">
-          {loading ? <div className="loading-state">Đang tải dữ liệu COD...</div> : (
-            <>
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '8%' }}>ID</th>
-                    <th style={{ width: '22%' }}>Shop</th>
-                    <th style={{ width: '20%' }}>Số tiền COD</th>
-                    <th style={{ width: '20%' }}>Ngày yêu cầu</th>
-                    <th style={{ width: '15%' }}>Trạng thái</th>
-                    {activeTab === 'pending' && <th style={{ width: '15%' }} className="text-right">Duyệt</th>}
+          {loading ? <div className="loading-state">Dang tai du lieu COD...</div> : activeFlow === 'shipper' ? (
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Shipper</th>
+                  <th>COD shop</th>
+                  <th>Phi tien mat</th>
+                  <th>Tong tien mat</th>
+                  <th>So don</th>
+                  <th>Ngay gui</th>
+                  <th>Trang thai</th>
+                  <th className="text-right">Xu ly</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shipperRows.map((row) => (
+                  <tr key={row.id_reconciliation}>
+                    <td><span className="badge-id">SCR-{row.id_reconciliation}</span></td>
+                    <td>
+                      <div className="font-medium">{row.shipper_name || 'Shipper'}</div>
+                      <div style={{ fontSize: '0.78rem', color: '#9ca3af' }}>{row.shipper_phone}</div>
+                    </td>
+                    <td>{money(row.total_cod)}</td>
+                    <td>{money(row.total_receiver_fee)}</td>
+                    <td><strong style={{ color: '#047857' }}>{money(row.total_cash)}</strong></td>
+                    <td>{row.order_count || row.linked_order_count || 0}</td>
+                    <td>{dateTime(row.created_at)}</td>
+                    <td><span style={{ padding: '3px 10px', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700, ...statusStyle(row.status) }}>{statusText(row.status)}</span></td>
+                    <td className="text-right">
+                      {row.status === 'CHO_XAC_NHAN' ? (
+                        <button className="btn-primary" style={{ padding: '6px 14px' }} onClick={() => confirmShipperCash(row)}>
+                          Xac nhan da thu
+                        </button>
+                      ) : <span style={{ color: '#6b7280' }}>{dateTime(row.confirmed_at)}</span>}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {paged.map((p: any) => (
-                    <tr key={p.id_payout}>
-                      <td><span className="badge-id">PAY-{p.id_payout}</span></td>
-                      <td>
-                        <div className="font-medium">{p.shop_name || `SHOP-${p.id_shop}`}</div>
-                        {p.phone && <div style={{ fontSize: '0.78rem', color: '#9ca3af' }}>{p.phone}</div>}
-                      </td>
-                      <td>
-                        <span style={{ fontWeight: 700, color: '#047857', fontSize: '1.05rem' }}>
-                          {parseFloat(p.total_cod || p.amount || 0).toLocaleString('vi-VN')}₫
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                        {new Date(p.created_at).toLocaleString('vi-VN')}
-                      </td>
-                      <td>
-                        <span style={{
-                          padding: '3px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 600,
-                          backgroundColor: activeTab === 'pending' ? '#fef9c3' : '#d1fae5',
-                          color: activeTab === 'pending' ? '#854d0e' : '#047857'
-                        }}>
-                          {p.status}
-                        </span>
-                      </td>
-                      {activeTab === 'pending' && (
-                        <td className="text-right">
-                          <button className="btn-primary"
-                            style={{ padding: '6px 14px', fontSize: '0.85rem' }}
-                            onClick={() => approvePayout(p.id_payout, p.shop_name || `SHOP-${p.id_shop}`)}>
-                            ✓ Duyệt
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                  {paged.length === 0 && (
-                    <tr><td colSpan={activeTab === 'pending' ? 6 : 5} className="empty-state">
-                      {activeTab === 'pending' ? 'Không có phiên COD nào đang chờ duyệt.' : 'Chưa có phiên nào được thanh toán.'}
-                    </td></tr>
-                  )}
-                </tbody>
-              </table>
-
-              {totalPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', padding: '16px', alignItems: 'center' }}>
-                  <button className="action-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>←</button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                    <button key={p} className="action-btn"
-                      style={{ fontWeight: p === page ? 700 : 400, backgroundColor: p === page ? 'var(--primary-color)' : 'transparent', color: p === page ? 'white' : 'inherit', borderRadius: '6px', minWidth: '32px' }}
-                      onClick={() => setPage(p)}>
-                      {p}
-                    </button>
-                  ))}
-                  <button className="action-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>→</button>
-                  <span style={{ color: '#6b7280', fontSize: '0.85rem' }}>Tổng: {currentList.length} kết quả</span>
-                </div>
-              )}
-            </>
+                ))}
+                {shipperRows.length === 0 && (
+                  <tr><td colSpan={9} className="empty-state">Chua co phieu shipper nop tien COD.</td></tr>
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Shop</th>
+                  <th>COD goc</th>
+                  <th>Phi</th>
+                  <th>Thuc chuyen</th>
+                  <th>So don</th>
+                  <th>Ngan hang</th>
+                  <th>Ngay yeu cau</th>
+                  <th>Trang thai</th>
+                  <th className="text-right">Xu ly</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payoutRows.map((row) => (
+                  <tr key={row.id_payout}>
+                    <td><span className="badge-id">PAY-{row.id_payout}</span></td>
+                    <td>
+                      <div className="font-medium">{row.shop_name || `SHOP-${row.id_shop || row.id_account}`}</div>
+                      <div style={{ fontSize: '0.78rem', color: '#9ca3af' }}>{row.phone}</div>
+                    </td>
+                    <td>{money(row.total_cod)}</td>
+                    <td>{money(row.service_fee)}</td>
+                    <td><strong style={{ color: '#047857' }}>{money(row.net_amount)}</strong></td>
+                    <td>{row.order_count || 0}</td>
+                    <td>
+                      <div className="font-medium">{row.bank_name || '-'}</div>
+                      <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>{row.account_number || '-'}</div>
+                    </td>
+                    <td>{dateTime(row.created_at || row.payout_date)}</td>
+                    <td><span style={{ padding: '3px 10px', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700, ...statusStyle(row.status) }}>{statusText(row.status)}</span></td>
+                    <td className="text-right">
+                      {row.status === 'CHO_DUYET' ? (
+                        <button className="btn-primary" style={{ padding: '6px 14px' }} onClick={() => approveShopPayout(row)}>
+                          Xac nhan chuyen
+                        </button>
+                      ) : <span style={{ color: '#6b7280' }}>{dateTime(row.approved_at)}</span>}
+                    </td>
+                  </tr>
+                ))}
+                {payoutRows.length === 0 && (
+                  <tr><td colSpan={10} className="empty-state">Chua co yeu cau payout COD tu shop.</td></tr>
+                )}
+              </tbody>
+            </table>
           )}
         </div>
       </div>

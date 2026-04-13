@@ -5,11 +5,6 @@ const shipperRepo = new ShipperRepository();
 const FREE_DELIVERY_LIMIT = 3;
 const REDELIVERY_FEE = 11000;
 
-const getReceiverFeeAmount = (order: any) =>
-  String(order.payer_type || 'SENDER').toUpperCase() === 'RECEIVER'
-    ? Number(order.shipping_fee || 0) + Number(order.insurance_fee || 0)
-    : 0;
-
 export class ShipperService {
   private async getEmployeeId(id_user: number) {
     const emp = await shipperRepo.findEmployeeByUserId(id_user);
@@ -118,6 +113,7 @@ export class ShipperService {
 
       await shipperRepo.updateOrderStatus(order.id_order, 'ĐÃ LẤY HÀNG', client);
       await shipperRepo.updateCurrentShipper(order.id_order, null, client);
+      const pickupCashItems = await shipperRepo.markCashCollectionsCollected(order.id_order, 'PICKUP', id_user, client);
       await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'LAY HANG THANH CONG', null, client);
 
       await client.query('COMMIT');
@@ -125,7 +121,10 @@ export class ShipperService {
       return {
         tracking_code,
         status: 'ĐÃ LẤY HÀNG',
-        message: 'Xac nhan lay hang thanh cong.',
+        sender_cash_collected: pickupCashItems.reduce((sum: number, item: any) => sum + Number(item.collected_amount || 0), 0),
+        message: pickupCashItems.length > 0
+          ? `Xac nhan lay hang thanh cong. Shipper da thu ${pickupCashItems.reduce((sum: number, item: any) => sum + Number(item.collected_amount || 0), 0).toLocaleString('vi-VN')}d phi ship tien mat tu shop.`
+          : 'Xac nhan lay hang thanh cong.',
       };
     } catch (error) {
       await client.query('ROLLBACK');
@@ -195,9 +194,15 @@ export class ShipperService {
       }
 
       const attemptCount = await shipperRepo.countDeliveryAttempts(order.id_order);
-      const receiverFeeAmount = getReceiverFeeAmount(order);
       const codAmount = Number(order.cod_amount || 0);
-      const totalCashCollected = codAmount + receiverFeeAmount;
+      const deliveryCashItems = await shipperRepo.markCashCollectionsCollected(order.id_order, 'DELIVERY', id_user, client);
+      const receiverFeeAmount = deliveryCashItems
+        .filter((item: any) => ['SHIPPING_FEE', 'INSURANCE_FEE'].includes(String(item.collection_type)))
+        .reduce((sum: number, item: any) => sum + Number(item.collected_amount || 0), 0);
+      const deliveryCodAmount = deliveryCashItems
+        .filter((item: any) => String(item.collection_type) === 'COD')
+        .reduce((sum: number, item: any) => sum + Number(item.collected_amount || 0), 0);
+      const totalCashCollected = deliveryCashItems.reduce((sum: number, item: any) => sum + Number(item.collected_amount || 0), 0);
 
       await shipperRepo.insertDeliveryAttempt(
         order.id_order,
@@ -222,14 +227,14 @@ export class ShipperService {
       await client.query('COMMIT');
 
       const parts = [];
-      if (codAmount > 0) parts.push(`COD ${codAmount.toLocaleString()}d`);
-      if (receiverFeeAmount > 0) parts.push(`phi nguoi nhan tra ${receiverFeeAmount.toLocaleString()}d`);
+      if (deliveryCodAmount > 0) parts.push(`COD ${deliveryCodAmount.toLocaleString()}d`);
+      if (receiverFeeAmount > 0) parts.push(`phi tien mat ${receiverFeeAmount.toLocaleString()}d`);
       const cashNote = totalCashCollected > 0 ? ` Shipper dang giu ${parts.join(' + ')}.` : '';
 
       return {
         tracking_code,
         status: 'GIAO THÀNH CÔNG',
-        collected_cod: codAmount,
+        collected_cod: deliveryCodAmount || codAmount,
         collected_receiver_fee: receiverFeeAmount,
         total_cash_collected: totalCashCollected,
         payer_type: String(order.payer_type || 'SENDER').toUpperCase(),
@@ -315,7 +320,7 @@ export class ShipperService {
   }
 
   async getCodSummary(id_user: number) {
-    const orders = await shipperRepo.getPendingCashOrdersByUser(id_user);
+    const orders = await shipperRepo.getPendingCashCollectionsByUser(id_user);
     const totalCod = orders.reduce((sum: number, order: any) => sum + Number(order.cod_amount || 0), 0);
     const totalReceiverFee = orders.reduce((sum: number, order: any) => sum + Number(order.receiver_fee_amount || 0), 0);
     const totalCashHeld = orders.reduce((sum: number, order: any) => sum + Number(order.cash_to_remit || 0), 0);
@@ -335,7 +340,7 @@ export class ShipperService {
     const assignment = await this.getSpokeAssignment(id_user);
     const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
 
-    const pendingOrders = await shipperRepo.getPendingCashOrdersByUser(id_user);
+    const pendingOrders = await shipperRepo.getPendingCashCollectionsByUser(id_user);
     if (pendingOrders.length === 0) {
       throw new Error('Khong co khoan tien nao can doi soat.');
     }
@@ -364,6 +369,7 @@ export class ShipperService {
       );
 
       await shipperRepo.markOrdersReconciled(orderIds, reconciliation.id_reconciliation, client);
+      await shipperRepo.markCashCollectionsReconciled(orderIds, reconciliation.id_reconciliation, client);
 
       for (const order of pendingOrders) {
         await shipperRepo.insertOrderLog(
@@ -384,7 +390,8 @@ export class ShipperService {
         total_cod: totalCod,
         total_receiver_fee: totalReceiverFee,
         total_cash: totalCash,
-        message: `Da ghi nhan nop ${totalCash.toLocaleString()}d ve buu cuc.`,
+        status: 'CHO_XAC_NHAN',
+        message: `Da tao phieu nop ${totalCash.toLocaleString()}d ve buu cuc. Cho admin xac nhan da nhan tien.`,
       };
     } catch (error) {
       await client.query('ROLLBACK');

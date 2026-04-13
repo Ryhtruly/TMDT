@@ -32,10 +32,20 @@ export class ShipperRepository {
       SELECT o.id_order, o.tracking_code, o.receiver_name, o.receiver_phone,
              o.receiver_address, o.cod_amount, o.weight, o.status, o.created_at,
              s.store_name, s.address as pickup_address, s.phone as pickup_phone,
-             a.province, a.district, COALESCE(o.payer_type, 'SENDER') as payer_type
+             a.province, a.district,
+             COALESCE(o.payer_type, 'SENDER') as payer_type,
+             COALESCE(o.fee_payment_method, 'WALLET') as fee_payment_method,
+             COALESCE(pickup_cash.sender_cash_fee, 0) as sender_cash_fee_on_pickup
       FROM orders o
       JOIN stores s ON o.id_store = s.id_store
       JOIN areas a ON o.id_dest_area = a.id_area
+      LEFT JOIN LATERAL (
+        SELECT SUM(expected_amount) as sender_cash_fee
+        FROM order_cash_collections occ
+        WHERE occ.id_order = o.id_order
+          AND occ.collection_stage = 'PICKUP'
+          AND occ.payer_party = 'SENDER'
+      ) pickup_cash ON TRUE
       WHERE o.status = 'CHỜ LẤY HÀNG'
       ORDER BY o.created_at ASC
     `
@@ -121,6 +131,7 @@ export class ShipperRepository {
              latest_log.action as latest_action,
              a.province, a.district, a.id_spoke as dest_spoke,
              COALESCE(o.payer_type, 'SENDER') as payer_type,
+             COALESCE(o.fee_payment_method, 'WALLET') as fee_payment_method,
              COALESCE(o.shipping_fee, 0) as shipping_fee,
              COALESCE(o.insurance_fee, 0) as insurance_fee,
              (SELECT COUNT(*) FROM delivery_attempts da WHERE da.id_order = o.id_order) as attempt_count
@@ -158,6 +169,7 @@ export class ShipperRepository {
              a.id_spoke as dest_spoke,
              latest_log.action as latest_action,
              COALESCE(o.payer_type, 'SENDER') as payer_type,
+             COALESCE(o.fee_payment_method, 'WALLET') as fee_payment_method,
              (SELECT COUNT(*) FROM delivery_attempts da WHERE da.id_order = o.id_order) as attempt_count
       FROM orders o
       JOIN stores s ON s.id_store = o.id_store
@@ -184,6 +196,7 @@ export class ShipperRepository {
              a.id_spoke as dest_spoke,
              latest_log.action as latest_action,
              COALESCE(o.payer_type, 'SENDER') as payer_type,
+             COALESCE(o.fee_payment_method, 'WALLET') as fee_payment_method,
              (SELECT COUNT(*) FROM delivery_attempts da WHERE da.id_order = o.id_order) as attempt_count
       FROM orders o
       JOIN stores s ON s.id_store = o.id_store
@@ -209,6 +222,37 @@ export class ShipperRepository {
 
   async updateCurrentShipper(id_order: number, current_shipper_id: number | null, client: any) {
     await client.query('UPDATE orders SET current_shipper_id = $1 WHERE id_order = $2', [current_shipper_id, id_order]);
+  }
+
+  async markCashCollectionsCollected(id_order: number, stage: 'PICKUP' | 'DELIVERY', id_shipper: number, client: any) {
+    const result = await client.query(
+      `
+      UPDATE order_cash_collections
+      SET collected_by_shipper = $3,
+          collected_at = COALESCE(collected_at, NOW()),
+          collected_amount = expected_amount
+      WHERE id_order = $1
+        AND collection_stage = $2
+        AND collected_at IS NULL
+      RETURNING *
+      `,
+      [id_order, stage, id_shipper]
+    );
+    return result.rows;
+  }
+
+  async getCashCollectionsByOrderAndStage(id_order: number, stage: 'PICKUP' | 'DELIVERY') {
+    const result = await pool.query(
+      `
+      SELECT *
+      FROM order_cash_collections
+      WHERE id_order = $1
+        AND collection_stage = $2
+      ORDER BY id_collection ASC
+      `,
+      [id_order, stage]
+    );
+    return result.rows;
   }
 
   async countDeliveryAttempts(id_order: number) {
@@ -356,7 +400,7 @@ export class ShipperRepository {
       `
       INSERT INTO shipper_cod_reconciliations
         (id_shipper, reconciliation_date, total_cod, total_receiver_fee, total_cash, order_count, status)
-      VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, 'DA_NOP')
+      VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, 'CHO_XAC_NHAN')
       RETURNING *
     `,
       [id_shipper, total_cod, total_receiver_fee, total_cash, order_count]
@@ -364,9 +408,65 @@ export class ShipperRepository {
     return result.rows[0];
   }
 
+  async getPendingCashCollectionsByUser(id_user: number) {
+    const result = await pool.query(
+      `
+      SELECT o.id_order,
+             o.tracking_code,
+             o.receiver_name,
+             o.receiver_phone,
+             o.receiver_address,
+             COALESCE(SUM(occ.collected_amount) FILTER (WHERE occ.collection_type = 'COD'), 0) as cod_amount,
+             COALESCE(o.shipping_fee, 0) as shipping_fee,
+             COALESCE(o.insurance_fee, 0) as insurance_fee,
+             COALESCE(o.payer_type, 'SENDER') as payer_type,
+             COALESCE(o.fee_payment_method, 'WALLET') as fee_payment_method,
+             COALESCE(SUM(occ.collected_amount) FILTER (WHERE occ.collection_type IN ('SHIPPING_FEE', 'INSURANCE_FEE')), 0) as receiver_fee_amount,
+             COALESCE(SUM(occ.collected_amount), 0) as cash_to_remit,
+             MIN(occ.collected_at) as first_collected_at,
+             MAX(occ.collected_at) as last_collected_at,
+             JSON_AGG(
+               JSON_BUILD_OBJECT(
+                 'id_collection', occ.id_collection,
+                 'collection_type', occ.collection_type,
+                 'payer_party', occ.payer_party,
+                 'collection_stage', occ.collection_stage,
+                 'amount', occ.collected_amount,
+                 'collected_at', occ.collected_at
+               )
+               ORDER BY occ.collected_at ASC, occ.id_collection ASC
+             ) as cash_items
+      FROM orders o
+      JOIN order_cash_collections occ ON occ.id_order = o.id_order
+      WHERE occ.collected_by_shipper = $1
+        AND occ.reconciliation_id IS NULL
+        AND occ.collected_at IS NOT NULL
+        AND COALESCE(occ.collected_amount, 0) > 0
+      GROUP BY o.id_order
+      ORDER BY MAX(occ.collected_at) DESC, o.id_order DESC
+      `,
+      [id_user]
+    );
+    return result.rows;
+  }
+
+  async markCashCollectionsReconciled(orderIds: number[], reconciliationId: number, client: any) {
+    if (orderIds.length === 0) return;
+    await client.query(
+      `
+      UPDATE order_cash_collections
+      SET reconciliation_id = $1
+      WHERE id_order = ANY($2::int[])
+        AND reconciliation_id IS NULL
+        AND collected_at IS NOT NULL
+      `,
+      [reconciliationId, orderIds]
+    );
+  }
+
   async markOrdersReconciled(orderIds: number[], reconciliationId: number, client: any) {
     if (orderIds.length === 0) return;
-    await client.query('UPDATE orders SET shipper_reconciliation_id = $1 WHERE id_order = ANY($2::int[])', [
+    await client.query('UPDATE orders SET shipper_reconciliation_id = $1 WHERE id_order = ANY($2::int[]) AND shipper_reconciliation_id IS NULL', [
       reconciliationId,
       orderIds,
     ]);

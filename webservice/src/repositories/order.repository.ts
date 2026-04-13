@@ -95,7 +95,7 @@ export class OrderRepository {
       tracking_code, id_store, id_service_type,
       receiver_name, receiver_phone, receiver_address,
       id_dest_area, weight, item_value, cod_amount,
-      insurance_fee, shipping_fee, note, status, payer_type,
+      insurance_fee, shipping_fee, note, status, payer_type, fee_payment_method,
       pickup_shift, dropoff_spoke_id
     } = data;
 
@@ -103,13 +103,36 @@ export class OrderRepository {
       INSERT INTO orders 
         (tracking_code, id_store, id_service_type, receiver_name, receiver_phone,
          receiver_address, id_dest_area, weight, item_value, cod_amount,
-         insurance_fee, shipping_fee, status, payer_type, pickup_shift, dropoff_spoke_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         insurance_fee, shipping_fee, status, payer_type, fee_payment_method, pickup_shift, dropoff_spoke_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
       RETURNING id_order
     `, [tracking_code, id_store, id_service_type, receiver_name, receiver_phone,
         receiver_address, id_dest_area, weight, item_value, cod_amount,
-        insurance_fee, shipping_fee, status, payer_type || 'SENDER', pickup_shift || null, dropoff_spoke_id || null]);
+        insurance_fee, shipping_fee, status, payer_type || 'SENDER', fee_payment_method || 'WALLET', pickup_shift || null, dropoff_spoke_id || null]);
     return result.rows[0].id_order;
+  }
+
+  async insertCashCollection(data: any, client: any) {
+    const {
+      id_order,
+      collection_type,
+      payer_party,
+      collection_stage,
+      expected_amount,
+    } = data;
+
+    if (Number(expected_amount || 0) <= 0) return null;
+
+    const result = await client.query(
+      `
+      INSERT INTO order_cash_collections
+        (id_order, collection_type, payer_party, collection_stage, expected_amount)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+      `,
+      [id_order, collection_type, payer_party, collection_stage, expected_amount]
+    );
+    return result.rows[0];
   }
 
   // Ghi log đơn hàng
@@ -124,13 +147,19 @@ export class OrderRepository {
   async findOrdersByShopUserId(id_user: number, status_filter?: string) {
     let query = `
       SELECT o.id_order, o.tracking_code, o.receiver_name, o.receiver_phone,
-             o.receiver_address, o.status, o.payer_type, o.shipping_fee, o.insurance_fee,
+             o.receiver_address, o.status, o.payer_type, o.fee_payment_method, o.shipping_fee, o.insurance_fee,
              o.cod_amount, o.item_value, o.weight, o.created_at,
              CASE
                WHEN COALESCE(o.payer_type, 'SENDER') = 'RECEIVER'
                  THEN COALESCE(o.shipping_fee, 0) + COALESCE(o.insurance_fee, 0)
                ELSE 0
              END as receiver_fee_on_delivery,
+             CASE
+               WHEN COALESCE(o.payer_type, 'SENDER') = 'SENDER'
+                 AND COALESCE(o.fee_payment_method, 'WALLET') = 'CASH'
+                 THEN COALESCE(o.shipping_fee, 0) + COALESCE(o.insurance_fee, 0)
+               ELSE 0
+             END as sender_cash_fee_on_pickup,
              COALESCE(o.cod_amount, 0) +
              CASE
                WHEN COALESCE(o.payer_type, 'SENDER') = 'RECEIVER'

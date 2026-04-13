@@ -6,6 +6,7 @@ const orderRepo = new OrderRepository();
 const shopRepo = new ShopRepository();
 
 type PayerType = 'SENDER' | 'RECEIVER';
+type FeePaymentMethod = 'WALLET' | 'CASH';
 type OperationalRouteType = 'DIRECT' | 'INTRA_HUB' | 'INTER_HUB';
 type PricingRouteType = 'Noi tinh' | 'Lien vung' | 'Xuyen mien';
 
@@ -27,6 +28,11 @@ const calcInsuranceFee = (itemValue: number): number =>
 
 const normalizePayerType = (value: unknown): PayerType =>
   String(value || 'SENDER').toUpperCase() === 'RECEIVER' ? 'RECEIVER' : 'SENDER';
+
+const normalizeFeePaymentMethod = (payerType: PayerType, value: unknown): FeePaymentMethod => {
+  if (payerType === 'RECEIVER') return 'CASH';
+  return String(value || 'WALLET').toUpperCase() === 'CASH' ? 'CASH' : 'WALLET';
+};
 
 const resolveOperationalRouteType = (originArea: any, destArea: any): OperationalRouteType => {
   if (originArea.id_spoke === destArea.id_spoke) return 'DIRECT';
@@ -64,22 +70,35 @@ const mapPricingRouteTypeForDb = (routeType: PricingRouteType) => {
   }
 };
 
-const buildPaymentFlow = (payerType: PayerType, totalFee: number, codAmount: number, walletAvailable: number) => {
-  const senderChargeNow = payerType === 'SENDER' ? totalFee : 0;
+const buildPaymentFlow = (
+  payerType: PayerType,
+  feePaymentMethod: FeePaymentMethod,
+  totalFee: number,
+  codAmount: number,
+  walletAvailable: number
+) => {
+  const senderChargeNow = payerType === 'SENDER' && feePaymentMethod === 'WALLET' ? totalFee : 0;
+  const senderCashFeeOnPickup = payerType === 'SENDER' && feePaymentMethod === 'CASH' ? totalFee : 0;
   const receiverFeeOnDelivery = payerType === 'RECEIVER' ? totalFee : 0;
   const cashToCollectOnDelivery = codAmount + receiverFeeOnDelivery;
+  const totalCashExpectedFromShipper = senderCashFeeOnPickup + cashToCollectOnDelivery;
 
   return {
     payer_type: payerType,
+    fee_payment_method: feePaymentMethod,
     sender_charge_now: senderChargeNow,
+    sender_cash_fee_on_pickup: senderCashFeeOnPickup,
     receiver_fee_on_delivery: receiverFeeOnDelivery,
     cash_to_collect_on_delivery: cashToCollectOnDelivery,
+    total_cash_expected_from_shipper: totalCashExpectedFromShipper,
     wallet_check: {
       available_balance: walletAvailable,
-      is_sufficient: payerType === 'RECEIVER' ? true : walletAvailable >= totalFee,
+      is_sufficient: senderChargeNow === 0 ? true : walletAvailable >= totalFee,
       warning:
         payerType === 'RECEIVER'
-          ? `Shop khong bi tru vi luc tao don. Shipper can thu ${cashToCollectOnDelivery.toLocaleString()}d khi giao.`
+          ? `Nguoi nhan tra phi. Shipper can thu ${cashToCollectOnDelivery.toLocaleString()}d khi giao.`
+          : feePaymentMethod === 'CASH'
+            ? `Shop tra phi bang tien mat. Shipper can thu ${senderCashFeeOnPickup.toLocaleString()}d khi lay hang.`
           : walletAvailable < totalFee
             ? `So du vi khong du. Can nap them it nhat ${(totalFee - walletAvailable).toLocaleString()}d`
             : 'So du du de tao don',
@@ -101,6 +120,7 @@ export class OrderService {
       cod_amount = 0,
       id_service_type,
       payer_type = 'SENDER',
+      fee_payment_method = 'WALLET',
       length = 0,
       width = 0,
       height = 0,
@@ -150,10 +170,17 @@ export class OrderService {
     const insuranceFee = calcInsuranceFee(item_value);
     const totalFee = shippingFee + insuranceFee;
     const normalizedPayerType = normalizePayerType(payer_type);
+    const normalizedFeePaymentMethod = normalizeFeePaymentMethod(normalizedPayerType, fee_payment_method);
 
     const wallet = await shopRepo.getWalletByUserId(idUser);
     const available = wallet ? Number(wallet.balance) + Number(wallet.credit_limit) - Number(wallet.used_credit) : 0;
-    const paymentFlow = buildPaymentFlow(normalizedPayerType, totalFee, Number(cod_amount || 0), available);
+    const paymentFlow = buildPaymentFlow(
+      normalizedPayerType,
+      normalizedFeePaymentMethod,
+      totalFee,
+      Number(cod_amount || 0),
+      available
+    );
 
     return {
       pickup_store: store.store_name,
@@ -191,6 +218,7 @@ export class OrderService {
       receiver_address,
       id_dest_area,
       payer_type = 'SENDER',
+      fee_payment_method = 'WALLET',
       weight,
       item_value = 0,
       cod_amount = 0,
@@ -242,13 +270,14 @@ export class OrderService {
     const insuranceFee = calcInsuranceFee(item_value);
     const totalFee = shippingFee + insuranceFee;
     const normalizedPayerType = normalizePayerType(payer_type);
+    const normalizedFeePaymentMethod = normalizeFeePaymentMethod(normalizedPayerType, fee_payment_method);
 
     const client = await orderRepo.getTxClient();
     try {
       await client.query('BEGIN');
 
       let walletAvailable = 0;
-      if (normalizedPayerType === 'SENDER') {
+      if (normalizedPayerType === 'SENDER' && normalizedFeePaymentMethod === 'WALLET') {
         const wallet = await orderRepo.findWalletForUpdate(idUser, client);
         if (!wallet) throw new Error('Vi tien khong ton tai. Vui long lien he admin.');
 
@@ -288,11 +317,71 @@ export class OrderService {
           note,
           status: 'CHỜ LẤY HÀNG',
           payer_type: normalizedPayerType,
+          fee_payment_method: normalizedFeePaymentMethod,
           pickup_shift,
           dropoff_spoke_id,
         },
         client
       );
+
+      if (Number(cod_amount || 0) > 0) {
+        await orderRepo.insertCashCollection(
+          {
+            id_order: idOrder,
+            collection_type: 'COD',
+            payer_party: 'RECEIVER',
+            collection_stage: 'DELIVERY',
+            expected_amount: Number(cod_amount || 0),
+          },
+          client
+        );
+      }
+
+      if (normalizedPayerType === 'RECEIVER') {
+        await orderRepo.insertCashCollection(
+          {
+            id_order: idOrder,
+            collection_type: 'SHIPPING_FEE',
+            payer_party: 'RECEIVER',
+            collection_stage: 'DELIVERY',
+            expected_amount: shippingFee,
+          },
+          client
+        );
+        await orderRepo.insertCashCollection(
+          {
+            id_order: idOrder,
+            collection_type: 'INSURANCE_FEE',
+            payer_party: 'RECEIVER',
+            collection_stage: 'DELIVERY',
+            expected_amount: insuranceFee,
+          },
+          client
+        );
+      }
+
+      if (normalizedPayerType === 'SENDER' && normalizedFeePaymentMethod === 'CASH') {
+        await orderRepo.insertCashCollection(
+          {
+            id_order: idOrder,
+            collection_type: 'SHIPPING_FEE',
+            payer_party: 'SENDER',
+            collection_stage: 'PICKUP',
+            expected_amount: shippingFee,
+          },
+          client
+        );
+        await orderRepo.insertCashCollection(
+          {
+            id_order: idOrder,
+            collection_type: 'INSURANCE_FEE',
+            payer_party: 'SENDER',
+            collection_stage: 'PICKUP',
+            expected_amount: insuranceFee,
+          },
+          client
+        );
+      }
 
       const hubLoc = await client.query('SELECT h.id_location FROM hubs h ORDER BY id_hub LIMIT 1');
       if (hubLoc.rows[0]) {
@@ -301,7 +390,13 @@ export class OrderService {
 
       await client.query('COMMIT');
 
-      const paymentFlow = buildPaymentFlow(normalizedPayerType, totalFee, Number(cod_amount || 0), walletAvailable);
+      const paymentFlow = buildPaymentFlow(
+        normalizedPayerType,
+        normalizedFeePaymentMethod,
+        totalFee,
+        Number(cod_amount || 0),
+        walletAvailable
+      );
 
       return {
         tracking_code: trackingCode,
@@ -312,15 +407,18 @@ export class OrderService {
         receiver: { name: receiver_name, phone: receiver_phone, address: receiver_address },
         fee_summary: {
           payer_type: normalizedPayerType,
+          fee_payment_method: normalizedFeePaymentMethod,
           operational_route_type: operationalRouteType,
           pricing_route_type: pricingRule?.route_type || mapPricingRouteTypeForDb(pricingRouteType),
           shipping_fee: shippingFee,
           insurance_fee: insuranceFee,
           total_fee: totalFee,
           sender_charged_now: paymentFlow.sender_charge_now,
+          sender_cash_fee_on_pickup: paymentFlow.sender_cash_fee_on_pickup,
           receiver_fee_on_delivery: paymentFlow.receiver_fee_on_delivery,
           cash_to_collect_on_delivery: paymentFlow.cash_to_collect_on_delivery,
-          remaining_balance: normalizedPayerType === 'SENDER' ? walletAvailable - totalFee : walletAvailable,
+          total_cash_expected_from_shipper: paymentFlow.total_cash_expected_from_shipper,
+          remaining_balance: normalizedPayerType === 'SENDER' && normalizedFeePaymentMethod === 'WALLET' ? walletAvailable - totalFee : walletAvailable,
         },
       };
     } catch (error) {

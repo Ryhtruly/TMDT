@@ -10,9 +10,57 @@ export const ensureSchema = async () => {
       total_receiver_fee NUMERIC NOT NULL DEFAULT 0,
       total_cash NUMERIC NOT NULL DEFAULT 0,
       order_count INT NOT NULL DEFAULT 0,
-      status VARCHAR(20) NOT NULL DEFAULT 'DA_NOP',
+      status VARCHAR(20) NOT NULL DEFAULT 'CHO_XAC_NHAN',
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE shipper_cod_reconciliations
+    ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP NOT NULL DEFAULT NOW();
+  `);
+
+  await pool.query(`
+    ALTER TABLE shipper_cod_reconciliations
+    ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMP;
+  `);
+
+  await pool.query(`
+    ALTER TABLE shipper_cod_reconciliations
+    ADD COLUMN IF NOT EXISTS confirmed_by INT;
+  `);
+
+  await pool.query(`
+    ALTER TABLE shipper_cod_reconciliations
+    ADD COLUMN IF NOT EXISTS admin_note VARCHAR(255);
+  `);
+
+  await pool.query(`
+    ALTER TABLE shipper_cod_reconciliations
+    ALTER COLUMN status SET DEFAULT 'CHO_XAC_NHAN';
+  `);
+
+  await pool.query(`
+    UPDATE shipper_cod_reconciliations
+    SET status = 'CHO_XAC_NHAN'
+    WHERE status = 'DA_NOP';
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'shipper_cod_reconciliations_confirmed_by_fk'
+      ) THEN
+        ALTER TABLE shipper_cod_reconciliations
+        ADD CONSTRAINT shipper_cod_reconciliations_confirmed_by_fk
+        FOREIGN KEY (confirmed_by)
+        REFERENCES users(id_user);
+      END IF;
+    END
+    $$;
   `);
 
   await pool.query(`
@@ -36,6 +84,11 @@ export const ensureSchema = async () => {
 
   await pool.query(`
     ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS fee_payment_method VARCHAR(20) NOT NULL DEFAULT 'WALLET';
+  `);
+
+  await pool.query(`
+    ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS shipper_reconciliation_id INT;
   `);
 
@@ -45,9 +98,276 @@ export const ensureSchema = async () => {
   `);
 
   await pool.query(`
+    ALTER TABLE cod_payouts
+    ADD COLUMN IF NOT EXISTS id_bank INT;
+  `);
+
+  await pool.query(`
+    ALTER TABLE cod_payouts
+    ADD COLUMN IF NOT EXISTS net_amount NUMERIC NOT NULL DEFAULT 0;
+  `);
+
+  await pool.query(`
+    ALTER TABLE cod_payouts
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW();
+  `);
+
+  await pool.query(`
+    ALTER TABLE cod_payouts
+    ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP;
+  `);
+
+  await pool.query(`
+    ALTER TABLE cod_payouts
+    ADD COLUMN IF NOT EXISTS approved_by INT;
+  `);
+
+  await pool.query(`
+    ALTER TABLE cod_payouts
+    ADD COLUMN IF NOT EXISTS admin_note VARCHAR(255);
+  `);
+
+  await pool.query(`
+    ALTER TABLE cod_payouts
+    ALTER COLUMN status SET DEFAULT 'CHO_DUYET';
+  `);
+
+  await pool.query(`
+    UPDATE cod_payouts
+    SET status = 'CHO_DUYET'
+    WHERE status IN ('CHỜ DUYỆT', 'CHá»œ DUYá»†T');
+  `);
+
+  await pool.query(`
+    UPDATE cod_payouts
+    SET status = 'DA_CHUYEN'
+    WHERE status IN ('ĐÃ CHUYỂN', 'ÄÃƒ CHUYá»‚N');
+  `);
+
+  await pool.query(`
+    UPDATE cod_payouts
+    SET net_amount = GREATEST(COALESCE(total_cod, 0) - COALESCE(service_fee, 0), 0)
+    WHERE COALESCE(net_amount, 0) = 0
+      AND COALESCE(total_cod, 0) > 0;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS cod_payout_items (
+      id_item SERIAL PRIMARY KEY,
+      id_payout INT NOT NULL REFERENCES cod_payouts(id_payout) ON DELETE CASCADE,
+      id_order INT NOT NULL REFERENCES orders(id_order),
+      cod_amount NUMERIC NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      UNIQUE(id_order)
+    );
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'cod_payouts_id_bank_fk'
+      ) THEN
+        ALTER TABLE cod_payouts
+        ADD CONSTRAINT cod_payouts_id_bank_fk
+        FOREIGN KEY (id_bank)
+        REFERENCES bank_accounts(id_bank);
+      END IF;
+    END
+    $$;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'cod_payouts_approved_by_fk'
+      ) THEN
+        ALTER TABLE cod_payouts
+        ADD CONSTRAINT cod_payouts_approved_by_fk
+        FOREIGN KEY (approved_by)
+        REFERENCES users(id_user);
+      END IF;
+    END
+    $$;
+  `);
+
+  await pool.query(`
     UPDATE orders
     SET payer_type = 'SENDER'
     WHERE payer_type IS NULL OR TRIM(payer_type) = '';
+  `);
+
+  await pool.query(`
+    UPDATE orders
+    SET fee_payment_method = CASE
+      WHEN payer_type = 'RECEIVER' THEN 'CASH'
+      ELSE COALESCE(NULLIF(TRIM(fee_payment_method), ''), 'WALLET')
+    END
+    WHERE fee_payment_method IS NULL OR TRIM(fee_payment_method) = '' OR payer_type = 'RECEIVER';
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS order_cash_collections (
+      id_collection SERIAL PRIMARY KEY,
+      id_order INT NOT NULL REFERENCES orders(id_order) ON DELETE CASCADE,
+      collection_type VARCHAR(30) NOT NULL,
+      payer_party VARCHAR(20) NOT NULL,
+      collection_stage VARCHAR(20) NOT NULL,
+      expected_amount NUMERIC NOT NULL DEFAULT 0,
+      collected_amount NUMERIC NOT NULL DEFAULT 0,
+      collected_by_shipper INT REFERENCES users(id_user),
+      collected_at TIMESTAMP,
+      reconciliation_id INT REFERENCES shipper_cod_reconciliations(id_reconciliation),
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_order_cash_collections_order
+    ON order_cash_collections(id_order);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_order_cash_collections_shipper_reconciliation
+    ON order_cash_collections(collected_by_shipper, reconciliation_id, collected_at);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_order_cash_collections_type
+    ON order_cash_collections(collection_type, reconciliation_id);
+  `);
+
+  await pool.query(`
+    INSERT INTO order_cash_collections
+      (id_order, collection_type, payer_party, collection_stage, expected_amount,
+       collected_amount, collected_by_shipper, collected_at, reconciliation_id)
+    SELECT
+      o.id_order,
+      'COD',
+      'RECEIVER',
+      'DELIVERY',
+      COALESCE(o.cod_amount, 0),
+      COALESCE(o.cod_amount, 0),
+      scr.id_shipper,
+      COALESCE(scr.confirmed_at, scr.submitted_at, scr.created_at),
+      scr.id_reconciliation
+    FROM orders o
+    JOIN shipper_cod_reconciliations scr ON scr.id_reconciliation = o.shipper_reconciliation_id
+    WHERE COALESCE(o.cod_amount, 0) > 0
+      AND NOT EXISTS (
+        SELECT 1
+        FROM order_cash_collections occ
+        WHERE occ.id_order = o.id_order
+          AND occ.collection_type = 'COD'
+      );
+  `);
+
+  await pool.query(`
+    INSERT INTO order_cash_collections
+      (id_order, collection_type, payer_party, collection_stage, expected_amount,
+       collected_amount, collected_by_shipper, collected_at, reconciliation_id)
+    SELECT
+      o.id_order,
+      'COD',
+      'RECEIVER',
+      'DELIVERY',
+      COALESCE(o.cod_amount, 0),
+      CASE WHEN delivered.id_shipper IS NOT NULL THEN COALESCE(o.cod_amount, 0) ELSE 0 END,
+      delivered.id_shipper,
+      delivered.delivered_at,
+      o.shipper_reconciliation_id
+    FROM orders o
+    LEFT JOIN LATERAL (
+      SELECT da.id_shipper, da.created_at as delivered_at
+      FROM delivery_attempts da
+      WHERE da.id_order = o.id_order
+        AND da.result = 'THÃ€NH CÃ”NG'
+      ORDER BY da.created_at DESC, da.id_attempt DESC
+      LIMIT 1
+    ) delivered ON TRUE
+    WHERE COALESCE(o.cod_amount, 0) > 0
+      AND NOT EXISTS (
+        SELECT 1
+        FROM order_cash_collections occ
+        WHERE occ.id_order = o.id_order
+          AND occ.collection_type = 'COD'
+      );
+  `);
+
+  await pool.query(`
+    INSERT INTO order_cash_collections
+      (id_order, collection_type, payer_party, collection_stage, expected_amount,
+       collected_amount, collected_by_shipper, collected_at, reconciliation_id)
+    SELECT
+      o.id_order,
+      fee.collection_type,
+      'RECEIVER',
+      'DELIVERY',
+      fee.amount,
+      fee.amount,
+      scr.id_shipper,
+      COALESCE(scr.confirmed_at, scr.submitted_at, scr.created_at),
+      scr.id_reconciliation
+    FROM orders o
+    JOIN shipper_cod_reconciliations scr ON scr.id_reconciliation = o.shipper_reconciliation_id
+    CROSS JOIN LATERAL (
+      VALUES
+        ('SHIPPING_FEE', COALESCE(o.shipping_fee, 0)),
+        ('INSURANCE_FEE', COALESCE(o.insurance_fee, 0))
+    ) AS fee(collection_type, amount)
+    WHERE COALESCE(o.payer_type, 'SENDER') = 'RECEIVER'
+      AND COALESCE(fee.amount, 0) > 0
+      AND NOT EXISTS (
+        SELECT 1
+        FROM order_cash_collections occ
+        WHERE occ.id_order = o.id_order
+          AND occ.collection_type = fee.collection_type
+          AND occ.payer_party = 'RECEIVER'
+      );
+  `);
+
+  await pool.query(`
+    INSERT INTO order_cash_collections
+      (id_order, collection_type, payer_party, collection_stage, expected_amount,
+       collected_amount, collected_by_shipper, collected_at, reconciliation_id)
+    SELECT
+      o.id_order,
+      fee.collection_type,
+      'RECEIVER',
+      'DELIVERY',
+      fee.amount,
+      CASE WHEN delivered.id_shipper IS NOT NULL THEN fee.amount ELSE 0 END,
+      delivered.id_shipper,
+      delivered.delivered_at,
+      o.shipper_reconciliation_id
+    FROM orders o
+    LEFT JOIN LATERAL (
+      SELECT da.id_shipper, da.created_at as delivered_at
+      FROM delivery_attempts da
+      WHERE da.id_order = o.id_order
+        AND da.result = 'THÃ€NH CÃ”NG'
+      ORDER BY da.created_at DESC, da.id_attempt DESC
+      LIMIT 1
+    ) delivered ON TRUE
+    CROSS JOIN LATERAL (
+      VALUES
+        ('SHIPPING_FEE', COALESCE(o.shipping_fee, 0)),
+        ('INSURANCE_FEE', COALESCE(o.insurance_fee, 0))
+    ) AS fee(collection_type, amount)
+    WHERE COALESCE(o.payer_type, 'SENDER') = 'RECEIVER'
+      AND COALESCE(fee.amount, 0) > 0
+      AND NOT EXISTS (
+        SELECT 1
+        FROM order_cash_collections occ
+        WHERE occ.id_order = o.id_order
+          AND occ.collection_type = fee.collection_type
+          AND occ.payer_party = 'RECEIVER'
+      );
   `);
 
   await pool.query(`
@@ -97,6 +417,21 @@ export const ensureSchema = async () => {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_shipper_cod_reconciliations_shipper_date
     ON shipper_cod_reconciliations(id_shipper, reconciliation_date DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_shipper_cod_reconciliations_status
+    ON shipper_cod_reconciliations(status, created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_cod_payouts_account_status
+    ON cod_payouts(id_account, status, created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_cod_payout_items_payout
+    ON cod_payout_items(id_payout);
   `);
 
   await pool.query(`

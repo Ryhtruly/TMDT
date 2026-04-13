@@ -4,6 +4,7 @@ import {
   resolveRoute, getAllRoutes, getRouteDetail,
   createBag, scanBag, getBagDetail,
   requestPayout, getMyPayouts, getPendingPayouts, approvePayout,
+  getAdminShipperCodReconciliations, confirmShipperCodReconciliation,
   getPromos, getAllPromos, createPromo, togglePromo, applyPromo,
   reportIncident, resolveIncident, getIncidents,
   getNotifications, markNotificationRead, markAllNotificationsRead,
@@ -19,93 +20,68 @@ import {
 
 const router = Router();
 
-// ============================================================
-// ROUTING (Admin / Stockkeeper xem & tạo tuyến)
-// ============================================================
-router.post('/routes/resolve', verifyToken, resolveRoute);                        // Tự tìm route cho 1 đơn
-router.get('/routes', verifyToken, checkRoles(['ADMIN']), getAllRoutes);           // Xem tất cả tuyến
-router.get('/routes/:id', verifyToken, getRouteDetail);                           // Chi tiết 1 tuyến
+// Routing
+router.post('/routes/resolve', verifyToken, resolveRoute);
+router.get('/routes', verifyToken, checkRoles(['ADMIN']), getAllRoutes);
+router.get('/routes/:id', verifyToken, getRouteDetail);
 
-// ============================================================
-// BAGS (Thủ kho tạo bao / quét bao)
-// ============================================================
-router.post('/bags', verifyToken, checkRoles(['STOCKKEEPER']), createBag);        // Tạo bao hàng
-router.post('/bags/scan', verifyToken, checkRoles(['STOCKKEEPER']), scanBag);     // Quét bao (DISPATCH / RECEIVE)
-router.get('/bags/:code', verifyToken, getBagDetail);                             // Xem chi tiết bao
+// Bags
+router.post('/bags', verifyToken, checkRoles(['STOCKKEEPER']), createBag);
+router.post('/bags/scan', verifyToken, checkRoles(['STOCKKEEPER']), scanBag);
+router.get('/bags/:code', verifyToken, getBagDetail);
 
-// ============================================================
-// COD PAYOUT (Shop yêu cầu + Admin duyệt)
-// ============================================================
-router.post('/cod/request', verifyToken, checkRoles(['SHOP']), requestPayout);    // Shop yêu cầu đối soát
-router.get('/cod/my-payouts', verifyToken, checkRoles(['SHOP']), getMyPayouts);   // Shop xem lịch sử đối soát
-router.get('/cod/pending', verifyToken, checkRoles(['ADMIN']), getPendingPayouts);// Admin xem phiên chờ duyệt
-router.put('/cod/:id/approve', verifyToken, checkRoles(['ADMIN']), approvePayout);// Admin phê duyệt
+// COD payout for shop
+router.post('/cod/request', verifyToken, checkRoles(['SHOP']), requestPayout);
+router.get('/cod/my-payouts', verifyToken, checkRoles(['SHOP']), getMyPayouts);
+router.get('/cod/pending', verifyToken, checkRoles(['ADMIN']), getPendingPayouts);
+router.get('/cod/payouts', verifyToken, checkRoles(['ADMIN']), getPendingPayouts);
+router.put('/cod/:id/approve', verifyToken, checkRoles(['ADMIN']), approvePayout);
 
-// ============================================================
-// PROMOTIONS (Shop xem + Admin quản lý)
-// ============================================================
-router.get('/promotions', getPromos);                                             // Xem KM đang hoạt động (public)
-router.get('/promotions/all', verifyToken, checkRoles(['ADMIN']), getAllPromos);   // Admin xem tất cả
-router.post('/promotions', verifyToken, checkRoles(['ADMIN']), createPromo);       // Admin tạo KM
-router.put('/promotions/:id/toggle', verifyToken, checkRoles(['ADMIN']), togglePromo); // Bật/tắt
-router.post('/promotions/apply', verifyToken, checkRoles(['SHOP']), applyPromo);  // Shop áp mã
+// Shipper cash reconciliation for admin
+router.get('/admin/shipper-cod-reconciliations', verifyToken, checkRoles(['ADMIN']), getAdminShipperCodReconciliations);
+router.put('/admin/shipper-cod-reconciliations/:id/confirm', verifyToken, checkRoles(['ADMIN']), confirmShipperCodReconciliation);
 
-// ============================================================
-// INCIDENTS (Sự cố đơn hàng — Shop báo, Admin xử lý)
-// ============================================================
-router.post('/incidents', verifyToken, reportIncident);                           // Báo sự cố
-router.put('/incidents/:id/resolve', verifyToken, checkRoles(['ADMIN']), resolveIncident); // Admin đền bù (max 5tr)
-router.get('/incidents', verifyToken, checkRoles(['ADMIN']), getIncidents);        // Xem tất cả
+// Promotions
+router.get('/promotions', getPromos);
+router.get('/promotions/all', verifyToken, checkRoles(['ADMIN']), getAllPromos);
+router.post('/promotions', verifyToken, checkRoles(['ADMIN']), createPromo);
+router.put('/promotions/:id/toggle', verifyToken, checkRoles(['ADMIN']), togglePromo);
+router.post('/promotions/apply', verifyToken, checkRoles(['SHOP']), applyPromo);
 
-// ============================================================
-// NOTIFICATIONS (Cần Token)
-// ============================================================
-router.get('/notifications', verifyToken, getNotifications);                      // Xem TB của mình
-router.put('/notifications/:id/read', verifyToken, markNotificationRead);         // Đánh dấu đã đọc
-router.put('/notifications/read-all', verifyToken, markAllNotificationsRead);     // Đánh dấu tất cả
+// Incidents
+router.post('/incidents', verifyToken, reportIncident);
+router.put('/incidents/:id/resolve', verifyToken, checkRoles(['ADMIN']), resolveIncident);
+router.get('/incidents', verifyToken, checkRoles(['ADMIN']), getIncidents);
 
-// ============================================================
-// FEEDBACKS (User gửi + Admin xem)
-// ============================================================
-router.post('/feedbacks', verifyToken, submitFeedback);                           // Gửi phản hồi
-router.get('/feedbacks', verifyToken, checkRoles(['ADMIN']), getFeedbacks);        // Admin xem
-router.put('/feedbacks/:id', verifyToken, checkRoles(['ADMIN']), updateFeedbackStatus); // Admin cập nhật
+// Notifications
+router.get('/notifications', verifyToken, getNotifications);
+router.put('/notifications/:id/read', verifyToken, markNotificationRead);
+router.put('/notifications/read-all', verifyToken, markAllNotificationsRead);
 
-// ============================================================
-// SHIPPER COD ĐỐI SOÁT CUỐI NGÀY
-// ============================================================
+// Feedbacks
+router.post('/feedbacks', verifyToken, submitFeedback);
+router.get('/feedbacks', verifyToken, checkRoles(['ADMIN']), getFeedbacks);
+router.put('/feedbacks/:id', verifyToken, checkRoles(['ADMIN']), updateFeedbackStatus);
+
+// Shipper COD summary
 router.get('/shipper/cod-summary', verifyToken, checkRoles(['SHIPPER']), getShipperCodSummary);
 
-// ============================================================
-// HOÀN HÀNG (Shop yêu cầu)
-// ============================================================
+// Return orders
 router.post('/orders/:id/return', verifyToken, checkRoles(['SHOP']), requestReturn);
 
-// ============================================================
-// SHIPPER INCOME (Lương — Docx bảng 33)
-// ============================================================
-router.get('/shipper/income', verifyToken, checkRoles(['SHIPPER']), calcShipperIncome);           // Xem lương kỳ hiện tại
-router.get('/shipper/income/history', verifyToken, checkRoles(['SHIPPER']), getShipperIncomeHistory); // Lịch sử lương
-router.post('/admin/shipper-salary', verifyToken, checkRoles(['ADMIN']), setShipperSalary);       // Admin set lương cứng + phạt
+// Shipper income
+router.get('/shipper/income', verifyToken, checkRoles(['SHIPPER']), calcShipperIncome);
+router.get('/shipper/income/history', verifyToken, checkRoles(['SHIPPER']), getShipperIncomeHistory);
+router.post('/admin/shipper-salary', verifyToken, checkRoles(['ADMIN']), setShipperSalary);
 
-// ============================================================
-// AUDIT LOG (Docx bảng 34 — Admin xem)
-// ============================================================
+// Audit log
 router.get('/admin/audit-log', verifyToken, checkRoles(['ADMIN']), getAuditLogs);
 
-// ============================================================
-// BÁO CÁO VẬN HÀNH SHOP (Docx dòng 1426)
-// ============================================================
+// Shop operations
 router.get('/shop/operations-report', verifyToken, checkRoles(['SHOP']), getOperationsReport);
-
-// ============================================================
-// TÌM KIẾM ĐƠN NÂNG CAO (Docx dòng 1399, 1526)
-// ============================================================
 router.get('/shop/search-orders', verifyToken, checkRoles(['SHOP']), searchOrders);
 
-// ============================================================
-// AN TOÀN XÓA KHO (Docx dòng 29)
-// ============================================================
+// Safe delete checks
 router.get('/admin/hub/:id/safe-delete', verifyToken, checkRoles(['ADMIN']), checkSafeDeleteHub);
 router.get('/admin/spoke/:id/safe-delete', verifyToken, checkRoles(['ADMIN']), checkSafeDeleteSpoke);
 

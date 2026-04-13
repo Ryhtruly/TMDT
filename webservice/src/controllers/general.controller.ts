@@ -51,7 +51,7 @@ export const getBagDetail = async (req: Request, res: Response): Promise<void> =
 
 // ============ COD PAYOUT ============
 export const requestPayout = async (req: AuthRequest, res: Response): Promise<void> => {
-  try { res.json({ status: 'success', data: await generalService.requestCodPayout(req.user.id_user) }); }
+  try { res.json({ status: 'success', data: await generalService.requestCodPayout(req.user.id_user, parseInt(String(req.body.id_bank))) }); }
   catch (e: any) { res.status(400).json({ status: 'error', message: e.message }); }
 };
 
@@ -66,8 +66,35 @@ export const getPendingPayouts = async (req: Request, res: Response): Promise<vo
 };
 
 export const approvePayout = async (req: Request, res: Response): Promise<void> => {
-  try { res.json({ status: 'success', ...(await generalService.approvePayout(parseInt(String(req.params.id)))) }); }
+  try {
+    const authReq = req as AuthRequest;
+    res.json({
+      status: 'success',
+      ...(await generalService.approvePayout(parseInt(String(req.params.id)), authReq.user.id_user, req.body?.admin_note))
+    });
+  }
   catch (e: any) { res.status(400).json({ status: 'error', message: e.message }); }
+};
+
+export const getAdminShipperCodReconciliations = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const status = req.query.status ? String(req.query.status) : undefined;
+    res.json({ status: 'success', data: await generalService.getAdminShipperCodReconciliations(status) });
+  } catch (e: any) { res.status(500).json({ status: 'error', message: e.message }); }
+};
+
+export const confirmShipperCodReconciliation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as AuthRequest;
+    res.json({
+      status: 'success',
+      ...(await generalService.confirmShipperCodReconciliation(
+        parseInt(String(req.params.id)),
+        authReq.user.id_user,
+        req.body?.admin_note
+      ))
+    });
+  } catch (e: any) { res.status(400).json({ status: 'error', message: e.message }); }
 };
 
 // ============ PROMOTIONS ============

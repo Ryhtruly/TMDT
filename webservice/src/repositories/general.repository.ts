@@ -2,35 +2,201 @@ import { pool } from '../config/db';
 
 export class GeneralRepository {
   // === COD PAYOUT ===
-  async getDeliveredOrdersForPayout(id_user: number) {
-    return (await pool.query(`
-      SELECT o.id_order, o.tracking_code, o.cod_amount, o.created_at
-      FROM orders o JOIN stores s ON o.id_store = s.id_store JOIN shops sh ON s.id_shop = sh.id_shop
-      WHERE sh.id_user = $1 AND o.status = 'GIAO THÀNH CÔNG' AND o.cod_amount > 0
-        AND o.id_order NOT IN (SELECT unnest(string_to_array(COALESCE(
-          (SELECT string_agg(cp.id_payout::text, ',') FROM cod_payouts cp WHERE cp.id_account = $1), ''), ','))::int)
-      ORDER BY o.created_at ASC
+  async getEligibleCodOrdersForPayout(id_user: number, client?: any) {
+    const db = client || pool;
+    return (await db.query(`
+      SELECT
+        o.id_order,
+        o.tracking_code,
+        COALESCE(occ.collected_amount, 0) AS cod_amount,
+        o.created_at,
+        s.store_name,
+        scr.id_reconciliation,
+        scr.confirmed_at
+      FROM orders o
+      JOIN stores s ON o.id_store = s.id_store
+      JOIN shops sh ON s.id_shop = sh.id_shop
+      JOIN order_cash_collections occ ON occ.id_order = o.id_order
+        AND occ.collection_type = 'COD'
+        AND occ.reconciliation_id IS NOT NULL
+        AND occ.collected_at IS NOT NULL
+      JOIN shipper_cod_reconciliations scr ON scr.id_reconciliation = occ.reconciliation_id
+      WHERE sh.id_user = $1
+        AND COALESCE(occ.collected_amount, 0) > 0
+        AND scr.status = 'DA_XAC_NHAN'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM cod_payout_items cpi
+          JOIN cod_payouts cp ON cp.id_payout = cpi.id_payout
+          WHERE cpi.id_order = o.id_order
+            AND COALESCE(cp.status, '') <> 'HUY'
+        )
+      ORDER BY scr.confirmed_at ASC NULLS LAST, o.created_at ASC
+      ${client ? 'FOR UPDATE OF o' : ''}
     `, [id_user])).rows;
   }
 
-  async createCodPayout(id_account: number, total_cod: number, service_fee: number, payout_date: string, client: any) {
+  async findBankByUser(id_user: number, id_bank: number) {
+    const result = await pool.query(
+      'SELECT * FROM bank_accounts WHERE id_bank = $1 AND id_user = $2',
+      [id_bank, id_user]
+    );
+    return result.rows[0] || null;
+  }
+
+  async createCodPayout(
+    id_account: number,
+    id_bank: number,
+    total_cod: number,
+    service_fee: number,
+    net_amount: number,
+    payout_date: string,
+    client: any
+  ) {
     const result = await client.query(
-      "INSERT INTO cod_payouts (id_account, total_cod, service_fee, payout_date, status) VALUES ($1, $2, $3, $4, 'CHỜ DUYỆT') RETURNING *",
-      [id_account, total_cod, service_fee, payout_date]
+      `
+      INSERT INTO cod_payouts
+        (id_account, id_bank, total_cod, service_fee, net_amount, payout_date, status)
+      VALUES ($1, $2, $3, $4, $5, $6, 'CHO_DUYET')
+      RETURNING *
+      `,
+      [id_account, id_bank, total_cod, service_fee, net_amount, payout_date]
     );
     return result.rows[0];
   }
 
+  async createCodPayoutItems(id_payout: number, orders: any[], client: any) {
+    for (const order of orders) {
+      await client.query(
+        `
+        INSERT INTO cod_payout_items (id_payout, id_order, cod_amount)
+        VALUES ($1, $2, $3)
+        `,
+        [id_payout, order.id_order, order.cod_amount]
+      );
+    }
+  }
+
   async getPayoutsByUser(id_user: number) {
-    return (await pool.query('SELECT * FROM cod_payouts WHERE id_account = $1 ORDER BY payout_date DESC', [id_user])).rows;
+    return (await pool.query(`
+      SELECT
+        cp.*,
+        ba.bank_name,
+        ba.account_number,
+        ba.account_holder,
+        COUNT(cpi.id_item) AS order_count
+      FROM cod_payouts cp
+      LEFT JOIN bank_accounts ba ON ba.id_bank = cp.id_bank
+      LEFT JOIN cod_payout_items cpi ON cpi.id_payout = cp.id_payout
+      WHERE cp.id_account = $1
+      GROUP BY cp.id_payout, ba.id_bank
+      ORDER BY cp.created_at DESC, cp.id_payout DESC
+    `, [id_user])).rows;
   }
 
-  async getAllPendingPayouts() {
-    return (await pool.query("SELECT cp.*, u.phone FROM cod_payouts cp JOIN users u ON cp.id_account = u.id_user WHERE cp.status = 'CHỜ DUYỆT' ORDER BY cp.payout_date ASC")).rows;
+  async getAllCodPayouts() {
+    return (await pool.query(`
+      SELECT
+        cp.*,
+        u.phone,
+        sh.id_shop,
+        sh.shop_name,
+        ba.bank_name,
+        ba.account_number,
+        ba.account_holder,
+        COUNT(cpi.id_item) AS order_count
+      FROM cod_payouts cp
+      JOIN users u ON cp.id_account = u.id_user
+      LEFT JOIN LATERAL (
+        SELECT id_shop, shop_name
+        FROM shops
+        WHERE id_user = u.id_user
+        ORDER BY id_shop ASC
+        LIMIT 1
+      ) sh ON TRUE
+      LEFT JOIN bank_accounts ba ON ba.id_bank = cp.id_bank
+      LEFT JOIN cod_payout_items cpi ON cpi.id_payout = cp.id_payout
+      GROUP BY cp.id_payout, u.id_user, sh.id_shop, sh.shop_name, ba.id_bank
+      ORDER BY cp.created_at DESC, cp.id_payout DESC
+    `)).rows;
   }
 
-  async approvePayout(id_payout: number, client: any) {
-    await client.query("UPDATE cod_payouts SET status = 'ĐÃ CHUYỂN' WHERE id_payout = $1", [id_payout]);
+  async findPayoutForUpdate(id_payout: number, client: any) {
+    const result = await client.query('SELECT * FROM cod_payouts WHERE id_payout = $1 FOR UPDATE', [id_payout]);
+    return result.rows[0] || null;
+  }
+
+  async approvePayout(id_payout: number, id_admin: number, admin_note: string | null, client: any) {
+    const result = await client.query(`
+      UPDATE cod_payouts
+      SET status = 'DA_CHUYEN',
+          approved_at = NOW(),
+          approved_by = $2,
+          admin_note = $3
+      WHERE id_payout = $1
+      RETURNING *
+    `, [id_payout, id_admin, admin_note]);
+    return result.rows[0] || null;
+  }
+
+  async getPayoutItems(id_payout: number) {
+    return (await pool.query(`
+      SELECT cpi.*, o.tracking_code, o.receiver_name, o.receiver_phone
+      FROM cod_payout_items cpi
+      JOIN orders o ON o.id_order = cpi.id_order
+      WHERE cpi.id_payout = $1
+      ORDER BY cpi.id_item ASC
+    `, [id_payout])).rows;
+  }
+
+  async getAdminShipperCodReconciliations(status?: string) {
+    const params: any[] = [];
+    let where = '';
+    if (status) {
+      params.push(status);
+      where = 'WHERE scr.status = $1';
+    }
+
+    return (await pool.query(`
+      SELECT
+        scr.*,
+        u.phone AS shipper_phone,
+        e.full_name AS shipper_name,
+        COUNT(DISTINCT occ.id_order) AS linked_order_count
+      FROM shipper_cod_reconciliations scr
+      JOIN users u ON u.id_user = scr.id_shipper
+      LEFT JOIN employees e ON e.id_user = u.id_user
+      LEFT JOIN order_cash_collections occ ON occ.reconciliation_id = scr.id_reconciliation
+      ${where}
+      GROUP BY scr.id_reconciliation, u.id_user, e.id_employee
+      ORDER BY scr.created_at DESC, scr.id_reconciliation DESC
+    `, params)).rows;
+  }
+
+  async findShipperCodReconciliationForUpdate(id_reconciliation: number, client: any) {
+    const result = await client.query(
+      'SELECT * FROM shipper_cod_reconciliations WHERE id_reconciliation = $1 FOR UPDATE',
+      [id_reconciliation]
+    );
+    return result.rows[0] || null;
+  }
+
+  async confirmShipperCodReconciliation(
+    id_reconciliation: number,
+    id_admin: number,
+    admin_note: string | null,
+    client: any
+  ) {
+    const result = await client.query(`
+      UPDATE shipper_cod_reconciliations
+      SET status = 'DA_XAC_NHAN',
+          confirmed_at = NOW(),
+          confirmed_by = $2,
+          admin_note = $3
+      WHERE id_reconciliation = $1
+      RETURNING *
+    `, [id_reconciliation, id_admin, admin_note]);
+    return result.rows[0] || null;
   }
 
   // === PROMOTIONS ===

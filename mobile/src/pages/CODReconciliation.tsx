@@ -73,7 +73,7 @@ const CODReconciliation = () => {
       const amount = Number(res?.data?.total_cash || 0);
       setSubmittedAmount(amount);
       setSubmitted(true);
-      showToast(`Da xac nhan nop ${amount.toLocaleString('vi-VN')}d ve buu cuc!`, 'success');
+      showToast(`Da tao phieu nop ${amount.toLocaleString('vi-VN')}d, cho admin xac nhan!`, 'success');
       setSummary(emptySummary);
     } catch (err: any) {
       showToast(err?.response?.data?.message || 'Khong the gui doi soat. Thu lai sau!', 'error');
@@ -87,16 +87,16 @@ const CODReconciliation = () => {
       <div className="cod-page">
         <div className="cod-success-screen">
           <div className="cod-success-icon"><FiCheckCircle size={50} /></div>
-          <h3>Doi Soat Thanh Cong!</h3>
+          <h3>Da Gui Phieu Doi Soat!</h3>
           <p>
             Ban da xac nhan nop <br />
             <strong>{submittedAmount.toLocaleString('vi-VN')}d</strong>
             <br />
-            ve buu cuc trong ca lam nay.
+            ve buu cuc trong ca lam nay, cho admin xac nhan da nhan tien.
           </p>
           <div className="cod-success-note">
             <FiInfo size={13} />
-            Danh sach don da nop da duoc tru khoi muc "tien dang giu".
+            Danh sach don da nop da duoc tru khoi muc "tien dang giu"; COD chi du dieu kien tra shop sau khi admin xac nhan.
           </div>
           <button
             className="btn-outline"
@@ -119,8 +119,8 @@ const CODReconciliation = () => {
 
       <div className="cod-header">
         <div>
-          <h2 className="cod-title">Doi Soat COD</h2>
-          <p className="cod-sub">Tong tien mat shipper chua nop ve buu cuc</p>
+          <h2 className="cod-title">Doi Soat Tien Mat</h2>
+          <p className="cod-sub">COD va phi ship tien mat shipper chua nop ve buu cuc</p>
         </div>
         <button className="cod-refresh-btn" onClick={fetchCodSummary}>
           <FiRefreshCw size={15} />
@@ -142,7 +142,7 @@ const CODReconciliation = () => {
         <>
           <div className="cod-warn-box">
             <FiAlertCircle size={14} />
-            <span>Cuoi ca, shipper phai nop du tien COD va phi thu ho tu nguoi nhan cho buu cuc.</span>
+            <span>Cuoi ca, shipper phai nop du COD va moi khoan phi ship/bao hiem da thu bang tien mat.</span>
           </div>
 
           <div className="cod-sum-row" style={{ marginTop: 12 }}>
@@ -150,7 +150,7 @@ const CODReconciliation = () => {
             <strong>{Number(summary.total_cod || 0).toLocaleString('vi-VN')}d</strong>
           </div>
           <div className="cod-sum-row">
-            <span>Phi nguoi nhan da tra:</span>
+            <span>Phi ship/bao hiem tien mat:</span>
             <strong>{Number(summary.total_receiver_fee || 0).toLocaleString('vi-VN')}d</strong>
           </div>
         </>
@@ -176,7 +176,7 @@ const CODReconciliation = () => {
                     <div className="cod-order-code">{order.tracking_code}</div>
                     <div className="cod-order-name">{order.receiver_name}</div>
                     {Number(order.receiver_fee_amount || 0) > 0 && (
-                      <div className="cod-order-name">Thu them phi ship: {Number(order.receiver_fee_amount).toLocaleString('vi-VN')}d</div>
+                      <div className="cod-order-name">Phi ship/bao hiem tien mat: {Number(order.receiver_fee_amount).toLocaleString('vi-VN')}d</div>
                     )}
                   </div>
                 </div>
