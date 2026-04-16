@@ -7,7 +7,7 @@ import './Dashboard.css';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ orders: 0, users: 0, shops: 0, wallets: 0 });
+  const [stats, setStats] = useState({ orders: 0, users: 0, shops: 0, wallets: 0, cod_pending_shipper: 0, cod_pending_payout: 0, cod_paid_this_month: 0 });
   const [chartData, setChartData] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,6 +116,40 @@ const Dashboard = () => {
                 <div className="stat-trend positive">
                    <FiArrowUpRight /> <span>24.3%</span> tăng trưởng doanh thu
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* COD Stats */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 16 }}>
+            <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/payouts')}>
+              <div className="stat-card-top">
+                <h3 className="stat-title">COD CHỜ SHIPPER NỘP</h3>
+                <div className="stat-icon-soft" style={{ backgroundColor: '#fef9c3', color: '#854d0e' }}><FiDollarSign /></div>
+              </div>
+              <div className="stat-card-body">
+                <div className="stat-value" style={{ fontSize: 20 }}>{stats.cod_pending_shipper.toLocaleString('vi-VN')} đ</div>
+                <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>Cần admin xác nhận đã thu tiền mặt</div>
+              </div>
+            </div>
+            <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/payouts')}>
+              <div className="stat-card-top">
+                <h3 className="stat-title">COD CHỜ PAYOUT SHOP</h3>
+                <div className="stat-icon-soft" style={{ backgroundColor: '#fee2e2', color: '#b91c1c' }}><FiDollarSign /></div>
+              </div>
+              <div className="stat-card-body">
+                <div className="stat-value" style={{ fontSize: 20 }}>{stats.cod_pending_payout.toLocaleString('vi-VN')} đ</div>
+                <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>Cần admin duyệt chuyển khoản</div>
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-card-top">
+                <h3 className="stat-title">COD ĐÃ PAYOUT THÁNG NÀY</h3>
+                <div className="stat-icon-soft" style={{ backgroundColor: '#d1fae5', color: '#047857' }}><FiDollarSign /></div>
+              </div>
+              <div className="stat-card-body">
+                <div className="stat-value" style={{ fontSize: 20, color: '#047857' }}>{stats.cod_paid_this_month.toLocaleString('vi-VN')} đ</div>
+                <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>Đã chuyển về tài khoản shop</div>
               </div>
             </div>
           </div>

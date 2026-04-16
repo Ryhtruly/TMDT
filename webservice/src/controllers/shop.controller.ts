@@ -18,6 +18,57 @@ export const registerShop = async (req: Request, res: Response): Promise<void> =
   }
 };
 
+export const sendOtp = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { phone } = req.body;
+    await shopService.sendOtp(phone, false);
+    res.json({
+      status: 'success',
+      message: 'Mã OTP đăng ký đã được gửi.'
+    });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+export const sendOtpForgot = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { phone } = req.body;
+    await shopService.sendOtp(phone, true);
+    res.json({
+      status: 'success',
+      message: 'Mã OTP khôi phục mật khẩu đã được gửi.'
+    });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+export const verifyOtp = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { phone, otp } = req.body;
+    await shopService.verifyOtp(phone, otp);
+    res.json({
+      status: 'success',
+      message: 'Xác thực OTP thành công.'
+    });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    await shopService.resetPassword(req.body);
+    res.json({
+      status: 'success',
+      message: 'Đổi mật khẩu thành công! Vui lòng đăng nhập lại.'
+    });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
 // 2. Xem thông tin Shop + Ví tiền
 export const getProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -119,6 +170,28 @@ export const topupWallet = async (req: AuthRequest, res: Response): Promise<void
     res.json({ status: 'success', ...data });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+import fs from 'fs';
+// 5b.2 Xử lý Webhook PayOS (Public)
+export const payosWebhook = async (req: Request, res: Response): Promise<void> => {
+  const logBase = `\n[${new Date().toISOString()}] Hook reached! Order: ${req.body?.data?.orderCode}`;
+  console.log(logBase);
+  try { fs.appendFileSync('webhook_debug.txt', logBase); } catch {}
+  try {
+    const webhookData = req.body;
+    const data = await shopService.verifyPayosWebhook(webhookData);
+    const succStr = `\n[Webhook] Xac thuc thanh cong: ${req.body?.data?.orderCode}`;
+    console.log(succStr);
+    try { fs.appendFileSync('webhook_debug.txt', succStr); } catch {}
+    res.json({ success: true, ...data });
+  } catch (error: any) {
+    const errStr = `\n[Webhook] Loi xac thuc: ${error.message}`;
+    console.log(errStr);
+    try { fs.appendFileSync('webhook_debug.txt', errStr); } catch {}
+    // Luôn trả về 200 OK cho Webhook để PayOS xác nhận URL thành công trong lúc cài đặt
+    res.status(200).json({ success: false, message: error.message || 'Ignored' });
   }
 };
 

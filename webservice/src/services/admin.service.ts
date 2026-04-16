@@ -283,5 +283,9 @@ export class AdminService {
       client.release();
     }
   }
+
+  async getReturnOrders(status?: string) {
+    return await adminRepo.getReturnOrders(status);
+  }
 }
 

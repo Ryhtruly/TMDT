@@ -13,6 +13,7 @@ import AuditAndSalary from './pages/AuditAndSalary';
 import RoutesPage from './pages/Routes';
 import Orders from './pages/Orders';
 import Shops from './pages/Shops';
+import Returns from './pages/Returns';
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
         <Route path="routes" element={<RoutesPage />} />
         <Route path="orders" element={<Orders />} />
         <Route path="shops" element={<Shops />} />
+        <Route path="returns" element={<Returns />} />
       </Route>
     </Routes>
   );

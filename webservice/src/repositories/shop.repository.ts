@@ -13,11 +13,16 @@ export class ShopRepository {
     return result.rows[0] || null;
   }
 
+  // Cập nhật mật khẩu cho user
+  async updatePassword(id_user: number, hashedPassword: string) {
+    await pool.query('UPDATE users SET password = $1 WHERE id_user = $2', [hashedPassword, id_user]);
+  }
+
   // Tạo user mới
-  async createUser(phone: string, hashedPassword: string, client: any) {
+  async createUser(phone: string, email: string, hashedPassword: string, client: any) {
     const result = await client.query(
-      'INSERT INTO users (phone, password, is_active) VALUES ($1, $2, TRUE) RETURNING id_user',
-      [phone, hashedPassword]
+      'INSERT INTO users (phone, email, password, is_active) VALUES ($1, $2, $3, TRUE) RETURNING id_user',
+      [phone, email, hashedPassword]
     );
     return result.rows[0].id_user;
   }
@@ -28,10 +33,10 @@ export class ShopRepository {
   }
 
   // Tạo Shop profile
-  async createShop(id_user: number, shop_name: string, tax_code: string, representative: string, client: any) {
+  async createShop(id_user: number, shop_name: string, client: any) {
     const result = await client.query(
-      'INSERT INTO shops (id_user, shop_name, tax_code, representative) VALUES ($1, $2, $3, $4) RETURNING id_shop',
-      [id_user, shop_name, tax_code, representative]
+      'INSERT INTO shops (id_user, shop_name) VALUES ($1, $2) RETURNING id_shop',
+      [id_user, shop_name]
     );
     return result.rows[0].id_shop;
   }
@@ -141,14 +146,35 @@ export class ShopRepository {
 
   // Nạp tiền vào ví
   async topupWallet(id_wallet: number, amount: number, client: any) {
-    await client.query(
-      'UPDATE wallets SET balance = balance + $1 WHERE id_wallet = $2',
-      [amount, id_wallet]
+    await client.query(`
+      UPDATE wallets
+      SET
+        balance = balance + CASE WHEN used_credit < $1 THEN $1 - used_credit ELSE 0 END,
+        used_credit = CASE WHEN used_credit < $1 THEN 0 ELSE used_credit - $1 END
+      WHERE id_wallet = $2
+    `, [amount, id_wallet]
     );
     await client.query(
       'INSERT INTO transaction_history (id_wallet, amount, type) VALUES ($1, $2, $3)',
       [id_wallet, amount, 'NẠP TIỀN']
     );
+  }
+
+  // Khởi tạo request nạp tiền PayOS
+  async createTopupTransaction(order_code: number, id_user: number, amount: number, client: any) {
+    await client.query(
+      `INSERT INTO topup_transactions (order_code, id_user, amount, status) VALUES ($1, $2, $3, 'PENDING')`,
+      [order_code, id_user, amount]
+    );
+  }
+
+  // Hoàn tất nạp tiền
+  async completeTopupTransaction(order_code: number, client: any) {
+    const res = await client.query(
+      `UPDATE topup_transactions SET status = 'SUCCESS' WHERE order_code::text = $1 AND status = 'PENDING' RETURNING *`,
+      [String(order_code)]
+    );
+    return res.rows[0] || null;
   }
 
   // Yêu cầu rút tiền khỏi ví
@@ -166,7 +192,8 @@ export class ShopRepository {
   // === HỦY ĐƠN (Có kiểm tra trạng thái) ===
   async findOrderForCancellation(id_order: number, id_shop: number) {
     const result = await pool.query(`
-      SELECT o.id_order, o.status, o.shipping_fee, o.insurance_fee
+      SELECT o.id_order, o.status, o.shipping_fee, o.insurance_fee,
+             o.fee_payment_method, o.payer_type
       FROM orders o
       JOIN stores s ON o.id_store = s.id_store
       WHERE o.id_order = $1 AND s.id_shop = $2
@@ -183,9 +210,13 @@ export class ShopRepository {
 
   // Hoàn tiền phí ship khi hủy
   async refundToWallet(id_wallet: number, amount: number, client: any) {
-    await client.query(
-      'UPDATE wallets SET balance = balance + $1 WHERE id_wallet = $2',
-      [amount, id_wallet]
+    await client.query(`
+      UPDATE wallets
+      SET
+        balance = balance + CASE WHEN used_credit < $1 THEN $1 - used_credit ELSE 0 END,
+        used_credit = CASE WHEN used_credit < $1 THEN 0 ELSE used_credit - $1 END
+      WHERE id_wallet = $2
+    `, [amount, id_wallet]
     );
     await client.query(
       'INSERT INTO transaction_history (id_wallet, amount, type) VALUES ($1, $2, $3)',
