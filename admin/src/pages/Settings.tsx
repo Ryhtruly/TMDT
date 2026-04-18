@@ -27,6 +27,10 @@ const Settings = () => {
   const [loadingRules, setLoadingRules] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
 
+  const [editingSvcId, setEditingSvcId] = useState<number | null>(null);
+  const [svcForm, setSvcForm] = useState({ description: '', base_multiplier: 1.0 });
+  const [savingSvcId, setSavingSvcId] = useState<number | null>(null);
+
   const [insurance, setInsurance] = useState({ threshold: 500000, rate_percent: 1.5 });
   const [loadingIns, setLoadingIns] = useState(false);
 
@@ -61,6 +65,11 @@ const Settings = () => {
     setEditForm({ price: rule.price, base_weight_g: rule.base_weight_g, extra_per_500g: rule.extra_per_500g });
   };
 
+  const startEditSvc = (svc: ServiceType) => {
+    setEditingSvcId(svc.id_service);
+    setSvcForm({ description: svc.description, base_multiplier: parseFloat(String(svc.base_multiplier)) });
+  };
+
   const handleSaveRule = async (id_rule: number) => {
     setSavingId(id_rule);
     try {
@@ -76,6 +85,19 @@ const Settings = () => {
       alert('Lỗi: ' + (err.response?.data?.message || err.message));
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const handleSaveSvc = async (id_service: number) => {
+    setSavingSvcId(id_service);
+    try {
+      await apiClient.put(`/admin/service-types/${id_service}`, svcForm);
+      setEditingSvcId(null);
+      fetchServiceTypes();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Có lỗi xảy ra khi lưu dịch vụ');
+    } finally {
+      setSavingSvcId(null);
     }
   };
 
@@ -218,14 +240,37 @@ const Settings = () => {
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {serviceTypes.map(svc => (
-              <div key={svc.id_service} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                <div>
-                  <div style={{ fontWeight: 600, color: 'var(--primary-color)' }}>{svc.service_name}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>{svc.description}</div>
-                </div>
-                <span style={{ fontWeight: 700, backgroundColor: '#ede9fe', color: '#6d28d9', padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem' }}>
-                  x{parseFloat(String(svc.base_multiplier)).toFixed(1)}
-                </span>
+              <div key={svc.id_service} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                {editingSvcId === svc.id_service ? (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--primary-color)' }}>{svc.service_name}</div>
+                    <label style={{ fontSize: '0.85rem' }}>Mô tả ngắn:</label>
+                    <input type="text" className="form-control" style={{ padding: '6px' }} value={svcForm.description} onChange={(e) => setSvcForm(p => ({ ...p, description: e.target.value }))} />
+                    <label style={{ fontSize: '0.85rem' }}>Hệ số x (Base Multiplier):</label>
+                    <input type="number" step="0.1" className="form-control" style={{ padding: '6px', maxWidth: '100px' }} value={svcForm.base_multiplier} onChange={(e) => setSvcForm(p => ({ ...p, base_multiplier: parseFloat(e.target.value) }))} />
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                      <button className="btn-save" style={{ padding: '4px 12px', fontSize: '0.85rem' }} disabled={savingSvcId === svc.id_service} onClick={() => handleSaveSvc(svc.id_service)}>
+                        {savingSvcId === svc.id_service ? '...' : 'Lưu'}
+                      </button>
+                      <button className="btn-cancel" style={{ padding: '4px 12px', fontSize: '0.85rem' }} onClick={() => setEditingSvcId(null)}>Hủy</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--primary-color)' }}>{svc.service_name}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>{svc.description}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ fontWeight: 700, backgroundColor: '#ede9fe', color: '#6d28d9', padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem' }}>
+                        x{parseFloat(String(svc.base_multiplier)).toFixed(1)}
+                      </span>
+                      <button className="action-btn text-primary" style={{ padding: '4px' }} title="Sửa" onClick={() => startEditSvc(svc)}>
+                        <FiEdit2 size={16} />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
             {serviceTypes.length === 0 && <p style={{ color: '#9ca3af', fontSize: '0.9rem' }}>Đang tải...</p>}

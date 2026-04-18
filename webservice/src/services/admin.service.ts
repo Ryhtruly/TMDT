@@ -257,6 +257,20 @@ export class AdminService {
     }
   }
 
+  async updateServiceType(id_service: number, base_multiplier: number, description: string) {
+    const client = await adminRepo.getTxClient();
+    try {
+      const result = await client.query(
+        'UPDATE service_types SET base_multiplier = $1, description = $2 WHERE id_service = $3 RETURNING *',
+        [base_multiplier, description, id_service]
+      );
+      if (result.rowCount === 0) throw new Error('Service type không tồn tại');
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
+  }
+
   async getShipperWardAssignments() {
     return await adminRepo.getShipperWardAssignments();
   }

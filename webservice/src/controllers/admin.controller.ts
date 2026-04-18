@@ -275,6 +275,21 @@ export const getServiceTypes = async (req: Request, res: Response): Promise<void
   }
 };
 
+export const updateServiceType = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { base_multiplier, description } = req.body;
+    if (!id || !base_multiplier) {
+      res.status(400).json({ status: 'error', message: 'Thiếu tham số bắt buộc' });
+      return;
+    }
+    const data = await adminService.updateServiceType(id, parseFloat(base_multiplier), description);
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
 export const getShipperWardAssignments = async (_req: Request, res: Response): Promise<void> => {
   try {
     const data = await adminService.getShipperWardAssignments();
