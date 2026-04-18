@@ -310,8 +310,6 @@ export class AdminService {
     }
   }
 
-  async getReturnOrders(status?: string) {
-    return await adminRepo.getReturnOrders(status);
-  }
+
 }
 
