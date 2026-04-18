@@ -134,6 +134,54 @@ export class ShipperService {
     }
   }
 
+  async reportFailedPickup(id_user: number, tracking_code: string, reason_fail: string) {
+    if (!reason_fail) throw new Error('Bat buoc nhap ly do lay hang that bai.');
+
+    const assignment = await this.getSpokeAssignment(id_user);
+    const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
+    const client = await shipperRepo.getTxClient();
+
+    try {
+      await client.query('BEGIN');
+
+      const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
+      if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
+      
+      if (order.status !== 'CHỜ LẤY HÀNG') {
+        throw new Error(`Chi co the bao that bai khi don dang o trang thai "CHỜ LẤY HÀNG". Hien tai: "${order.status}".`);
+      }
+
+      const originArea = await shipperRepo.resolveSpokeByAddress(order.store_address || '');
+      if (!originArea || Number(originArea.id_spoke) !== Number(assignment.id_spoke)) {
+        throw new Error('Don nay khong thuoc khu vuc lay hang cua ban.');
+      }
+
+      await shipperRepo.updateOrderStatus(order.id_order, 'LẤY HÀNG THẤT BẠI', client);
+      await shipperRepo.updateCurrentShipper(order.id_order, null, client);
+      await shipperRepo.insertOrderLog(
+        order.id_order,
+        idLocation,
+        id_user,
+        `LAY HANG THAT BAI. Ly do: ${reason_fail}`,
+        null,
+        client
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        tracking_code,
+        status: 'LẤY HÀNG THẤT BẠI',
+        message: `Ghi nhan lay hang that bai voi ly do: ${reason_fail}`,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async startDelivery(id_user: number, tracking_code: string) {
     const assignment = await this.getSpokeAssignment(id_user);
     const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);

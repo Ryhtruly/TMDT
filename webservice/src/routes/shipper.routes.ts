@@ -5,6 +5,7 @@ import {
   getDeliveryList,
   getDashboardSummary,
   confirmPickup,
+  reportFailedPickup,
   startDelivery,
   confirmDelivered,
   reportFailed,
@@ -23,6 +24,7 @@ router.get('/pickup-list', getPickupList);
 router.get('/delivery-list', getDeliveryList);
 router.get('/summary', getDashboardSummary);
 router.post('/scan/pickup', confirmPickup);
+router.post('/scan/pickup-failed', reportFailedPickup);
 router.post('/scan/start-delivery', startDelivery);
 router.post('/scan/delivered', confirmDelivered);
 router.post('/scan/failed', reportFailed);

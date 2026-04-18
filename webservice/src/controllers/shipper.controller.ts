@@ -45,6 +45,16 @@ export const confirmPickup = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
+export const reportFailedPickup = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tracking_code, reason_fail } = req.body;
+    const data = await shipperService.reportFailedPickup(req.user.id_user, String(tracking_code).toUpperCase(), reason_fail);
+    res.json({ status: 'success', tracking_code: data.tracking_code, new_status: data.status, message: data.message });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
 export const startDelivery = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { tracking_code } = req.body;
