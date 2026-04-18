@@ -408,7 +408,7 @@ img { max-width: 100%; display: block; }
    ================================================ */
 
 .toast {
-  position: fixed;
+  position: absolute;
   top: calc(var(--header-height) + 12px);
   left: 50%;
   transform: translateX(-50%);

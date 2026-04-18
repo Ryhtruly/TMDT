@@ -128,7 +128,7 @@
   background: rgba(15, 23, 42, 0.98);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: stretch;
   z-index: 100;
@@ -143,7 +143,7 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  color: rgba(255,255,255,0.38);
+  color: rgba(255, 255, 255, 0.38);
   text-decoration: none;
   padding: 8px 4px;
   transition: all 0.2s;
@@ -170,9 +170,11 @@
 .stock-bottom-nav .nav-item.active {
   color: var(--primary);
 }
+
 .stock-bottom-nav .nav-item.active svg {
   transform: scale(1.12);
 }
+
 .stock-bottom-nav .nav-item.active span {
   font-weight: 700;
 }
@@ -192,8 +194,9 @@
 
 /* Hover state */
 .stock-bottom-nav .nav-item:hover:not(.active) {
-  color: rgba(255,255,255,0.65);
+  color: rgba(255, 255, 255, 0.65);
 }
+
 .stock-bottom-nav .nav-item:active svg {
   transform: scale(0.9);
 }

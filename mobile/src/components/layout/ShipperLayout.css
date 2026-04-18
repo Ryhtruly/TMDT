@@ -151,12 +151,11 @@
 
 /* ===== BOTTOM NAVIGATION ===== */
 .sh-bottom-nav {
-  position: fixed;
+  position: absolute;
   bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
   width: 100%;
-  max-width: var(--max-width);
   height: var(--bottom-nav-height);
   background: rgba(15, 23, 42, 0.98);
   backdrop-filter: blur(20px);
