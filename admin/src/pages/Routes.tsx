@@ -4,13 +4,16 @@ import apiClient from '../api/client';
 
 interface RouteNode {
   id_route: number;
-  origin_hub_id: number;
-  dest_hub_id: number;
-  origin_hub_name: string;
-  dest_hub_name: string;
+  origin_spoke: number;
+  dest_spoke: number;
+  origin_name: string;
+  origin_hub: string;
+  dest_name: string;
+  dest_hub: string;
   distance_km: number;
   estimated_hours: number;
   is_active: boolean;
+  route_type?: string;
 }
 
 interface RouteStop {
@@ -65,8 +68,10 @@ const Routes = () => {
   };
 
   const filtered = routes.filter(r =>
-    r.origin_hub_name?.toLowerCase().includes(searchText.toLowerCase()) ||
-    r.dest_hub_name?.toLowerCase().includes(searchText.toLowerCase())
+    r.origin_name?.toLowerCase().includes(searchText.toLowerCase()) ||
+    r.origin_hub?.toLowerCase().includes(searchText.toLowerCase()) ||
+    r.dest_name?.toLowerCase().includes(searchText.toLowerCase()) ||
+    r.dest_hub?.toLowerCase().includes(searchText.toLowerCase())
   );
 
   const totalActive = routes.filter(r => r.is_active).length;
@@ -130,10 +135,10 @@ const Routes = () => {
               <thead>
                 <tr>
                   <th style={{ width: '7%' }}>ID</th>
-                  <th style={{ width: '28%' }}>Hub Xuất Phát</th>
+                  <th style={{ width: '28%' }}>Bưu Cục QL (Xuất Phát)</th>
                   <th style={{ width: '5%' }}></th>
-                  <th style={{ width: '28%' }}>Hub Đích</th>
-                  <th style={{ width: '12%' }}>Khoảng cách</th>
+                  <th style={{ width: '28%' }}>Bưu Cục QL (Đích)</th>
+                  <th style={{ width: '12%' }}>Tuyển Loại</th>
                   <th style={{ width: '10%' }}>Trạng thái</th>
                   <th style={{ width: '10%' }} className="text-right">Chi tiết</th>
                 </tr>
@@ -142,11 +147,14 @@ const Routes = () => {
                 {filtered.map(route => (
                   <>
                     <tr key={route.id_route} style={{ cursor: 'pointer' }} onClick={() => handleExpand(route)}>
-                      <td><span className="badge-id">RT-{route.id_route}</span></td>
+                      <td><span className="badge-id" style={{fontSize: 10}}>RT-{route.id_route}</span></td>
                       <td>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
-                          <FiMapPin style={{ color: '#6d28d9' }} />
-                          {route.origin_hub_name || `Hub-${route.origin_hub_id}`}
+                          <FiMapPin style={{ color: '#6d28d9', flexShrink: 0 }} />
+                          <div>
+                            <div style={{fontSize: 12}}>{route.origin_name || `BC-${route.origin_spoke}`}</div>
+                            <div style={{fontSize: 10, color: '#6b7280', fontWeight: 500}}>Trực thuộc {route.origin_hub}</div>
+                          </div>
                         </span>
                       </td>
                       <td style={{ textAlign: 'center', color: '#9ca3af' }}>
@@ -154,13 +162,15 @@ const Routes = () => {
                       </td>
                       <td>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
-                          <FiMapPin style={{ color: '#047857' }} />
-                          {route.dest_hub_name || `Hub-${route.dest_hub_id}`}
+                          <FiMapPin style={{ color: '#047857', flexShrink: 0 }} />
+                          <div>
+                            <div style={{fontSize: 12}}>{route.dest_name || `BC-${route.dest_spoke}`}</div>
+                            <div style={{fontSize: 10, color: '#6b7280', fontWeight: 500}}>Trực thuộc {route.dest_hub}</div>
+                          </div>
                         </span>
                       </td>
-                      <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                        {route.distance_km ? `${route.distance_km} km` : '—'}
-                        {route.estimated_hours ? <><br /><span style={{ fontSize: '0.78rem' }}>~{route.estimated_hours}h</span></> : null}
+                      <td style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>
+                        {route.route_type}
                       </td>
                       <td>
                         <span style={{
