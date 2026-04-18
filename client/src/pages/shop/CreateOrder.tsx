@@ -183,6 +183,9 @@ const CreateOrder = () => {
           height: Number(formData.height || 0),
         })) as any;
         setPreviewFee(res?.status === 'success' ? res.data : null);
+        if (res?.status === 'success' && res.data?.operational_route_type !== 'NOI_TINH' && formData.id_service_type === 3) {
+          setFormData((p) => ({ ...p, id_service_type: 1 }));
+        }
       } catch {
         setPreviewFee(null);
       } finally {
@@ -339,17 +342,20 @@ const CreateOrder = () => {
 
             <div className="ghn-card-title">Dịch Vụ Vận Chuyển</div>
             <div className="service-cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-              {serviceTypes.map(svc => (
-                <label key={svc.id_service} className={`service-card ${formData.id_service_type === svc.id_service ? 'active' : ''}`}>
-                  <div className="service-card-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
-                      <input type="radio" checked={formData.id_service_type === svc.id_service} onChange={() => setFormData((p) => ({ ...p, id_service_type: svc.id_service }))} />
-                      <span style={{ fontWeight: 600 }}>{svc.service_name}</span>
+              {serviceTypes.map(svc => {
+                const disableSameDay = svc.id_service === 3 && previewFee && previewFee.operational_route_type !== 'NOI_TINH';
+                return (
+                  <label key={svc.id_service} className={`service-card ${formData.id_service_type === svc.id_service ? 'active' : ''} ${disableSameDay ? 'disabled' : ''}`} style={disableSameDay ? { opacity: 0.5, pointerEvents: 'none' } : {}}>
+                    <div className="service-card-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+                        <input type="radio" checked={formData.id_service_type === svc.id_service} disabled={disableSameDay} onChange={() => setFormData((p) => ({ ...p, id_service_type: svc.id_service }))} />
+                        <span style={{ fontWeight: 600 }}>{svc.service_name}</span>
+                      </div>
+                      <span style={{ fontSize: '0.8rem', color: '#6b7280', paddingLeft: '24px' }}>{svc.description} - x{parseFloat(svc.base_multiplier).toFixed(1)}</span>
                     </div>
-                    <span style={{ fontSize: '0.8rem', color: '#6b7280', paddingLeft: '24px' }}>{svc.description} - x{parseFloat(svc.base_multiplier).toFixed(1)}</span>
-                  </div>
-                </label>
-              ))}
+                  </label>
+                );
+              })}
               {serviceTypes.length === 0 && <div style={{ fontSize: '13px', color: '#6b7280' }}>Đang tải dịch vụ...</div>}
             </div>
           </div>
