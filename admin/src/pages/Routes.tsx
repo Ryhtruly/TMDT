@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FiNavigation, FiSearch, FiArrowRight, FiMapPin, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import apiClient from '../api/client';
 
@@ -74,7 +74,7 @@ const Routes = () => {
     r.dest_hub?.toLowerCase().includes(searchText.toLowerCase())
   );
 
-  const totalActive = routes.filter(r => r.is_active).length;
+  const totalActive = routes.filter(r => r.is_active !== false).length;
 
   return (
     <div className="routes-page">
@@ -138,15 +138,17 @@ const Routes = () => {
                   <th style={{ width: '28%' }}>Bưu Cục QL (Xuất Phát)</th>
                   <th style={{ width: '5%' }}></th>
                   <th style={{ width: '28%' }}>Bưu Cục QL (Đích)</th>
-                  <th style={{ width: '12%' }}>Tuyển Loại</th>
+                  <th style={{ width: '12%' }}>Tuyến Loại</th>
                   <th style={{ width: '10%' }}>Trạng thái</th>
                   <th style={{ width: '10%' }} className="text-right">Chi tiết</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(route => (
-                  <>
-                    <tr key={route.id_route} style={{ cursor: 'pointer' }} onClick={() => handleExpand(route)}>
+                {filtered.map(route => {
+                  const isActive = route.is_active !== false;
+                  return (
+                  <React.Fragment key={route.id_route}>
+                    <tr style={{ cursor: 'pointer' }} onClick={() => handleExpand(route)}>
                       <td><span className="badge-id" style={{fontSize: 10}}>RT-{route.id_route}</span></td>
                       <td>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
@@ -175,10 +177,10 @@ const Routes = () => {
                       <td>
                         <span style={{
                           padding: '3px 10px', borderRadius: '12px', fontSize: '0.78rem', fontWeight: 600,
-                          backgroundColor: route.is_active ? '#d1fae5' : '#f3f4f6',
-                          color: route.is_active ? '#047857' : '#6b7280'
+                          backgroundColor: isActive ? '#d1fae5' : '#f3f4f6',
+                          color: isActive ? '#047857' : '#6b7280'
                         }}>
-                          {route.is_active ? '● Hoạt động' : '○ Tạm ngưng'}
+                          {isActive ? '● Hoạt động' : '○ Tạm ngưng'}
                         </span>
                       </td>
                       <td className="text-right">
@@ -216,8 +218,8 @@ const Routes = () => {
                         </td>
                       </tr>
                     )}
-                  </>
-                ))}
+                  </React.Fragment>
+                )})}
                 {filtered.length === 0 && (
                   <tr><td colSpan={7} className="empty-state">Chưa có tuyến đường nào trong hệ thống.</td></tr>
                 )}
