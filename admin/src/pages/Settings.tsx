@@ -16,7 +16,7 @@ interface ServiceType {
   id_service: number;
   service_name: string;
   description: string;
-  multiplier: number;
+  base_multiplier: number;
 }
 
 const Settings = () => {
@@ -224,7 +224,7 @@ const Settings = () => {
                   <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>{svc.description}</div>
                 </div>
                 <span style={{ fontWeight: 700, backgroundColor: '#ede9fe', color: '#6d28d9', padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem' }}>
-                  x{parseFloat(String(svc.multiplier)).toFixed(1)}
+                  x{parseFloat(String(svc.base_multiplier)).toFixed(1)}
                 </span>
               </div>
             ))}
