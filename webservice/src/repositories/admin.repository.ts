@@ -31,7 +31,10 @@ export class AdminRepository {
 
   // Dashboard Stats
   async getDashboardCounts() {
-    const [orders, users, shops, wallets, chartRes] = await Promise.all([
+    const [
+      orders, users, shops, wallets, chartRes,
+      pendingShipperRes, pendingPayoutRes, paidThisMonthRes
+    ] = await Promise.all([
       pool.query("SELECT COUNT(*) as cnt FROM orders"),
       pool.query("SELECT COUNT(*) as cnt FROM users WHERE is_active = TRUE"),
       pool.query("SELECT COUNT(*) as cnt FROM shops"),
@@ -42,7 +45,10 @@ export class AdminRepository {
         WHERE created_at >= NOW() - INTERVAL '7 days'
         GROUP BY TO_CHAR(created_at, 'DD/MM')
         ORDER BY MIN(created_at) ASC
-      `)
+      `),
+      pool.query("SELECT SUM(total_cod) as sum FROM shipper_cod_reconciliations WHERE status = 'CHO_XAC_NHAN'"),
+      pool.query("SELECT SUM(total_cod) as sum FROM cod_payouts WHERE status = 'CHO_DUYET'"),
+      pool.query("SELECT SUM(total_cod) as sum FROM cod_payouts WHERE status = 'DA_CHUYEN' AND created_at >= date_trunc('month', CURRENT_DATE)")
     ]);
 
     // Lấy nguyên dữ liệu thật từ DB, không dùng mock data nữa
@@ -53,6 +59,9 @@ export class AdminRepository {
       users: parseInt(users.rows[0].cnt || '0'),
       shops: parseInt(shops.rows[0].cnt || '0'),
       wallets: parseFloat(wallets.rows[0].sum || '0'),
+      cod_pending_shipper: parseFloat(pendingShipperRes.rows[0].sum || '0'),
+      cod_pending_payout: parseFloat(pendingPayoutRes.rows[0].sum || '0'),
+      cod_paid_this_month: parseFloat(paidThisMonthRes.rows[0].sum || '0'),
       chartData
     };
   }
