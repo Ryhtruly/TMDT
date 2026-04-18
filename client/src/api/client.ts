@@ -1,16 +1,16 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  baseURL: 'http://localhost:3000/api', // Match backend dev URL
+  baseURL: 'http://localhost:3000/api',
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
-// Request Interceptor: Attach JWT Token
+// Đọc token từ sessionStorage thay vì localStorage
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('shop_token');
+    const token = sessionStorage.getItem('shop_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -19,16 +19,15 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor: Unwrap array/data securely & Auto Logout
+// Tự động đăng xuất nếu token lỗi/hết hạn (401)
 apiClient.interceptors.response.use(
   (response) => {
-    // Luôn luôn unwrap axios layer, trả về payload thật sự từ Backend
     return response.data;
   },
   (error) => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('shop_token');
-      localStorage.removeItem('shop_user');
+      sessionStorage.removeItem('shop_token');
+      sessionStorage.removeItem('shop_user');
       window.location.href = '/login';
     }
     return Promise.reject(error);
