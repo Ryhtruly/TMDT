@@ -180,7 +180,7 @@ export class AdminRepository {
   async getAllShops() {
     const result = await pool.query(`
       SELECT 
-        s.id_shop, s.shop_name, s.tax_code, s.representative,
+        s.id_shop, s.shop_name, NULL as tax_code, NULL as representative,
         u.phone, u.is_active,
         COALESCE(w.balance, 0) AS wallet_balance,
         COUNT(DISTINCT o.id_order) AS total_orders
