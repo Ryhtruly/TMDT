@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { FiBox, FiChevronRight, FiPhone } from 'react-icons/fi';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import apiClient from '../../api/client';
+import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../../utils/phone';
 import './CreateOrder.css';
 
 const CreateOrder = () => {
@@ -189,11 +190,14 @@ const CreateOrder = () => {
     e.preventDefault();
     if (!formData.id_store) return alert('Vui long tao kho gui hang truoc.');
     if (!idDestArea) return alert('Vui long chon dia chi nguoi nhan thuoc khu vuc da cau hinh.');
+    const normalizedReceiverPhone = normalizeVietnamPhone(formData.receiver_phone);
+    if (!isValidVietnamPhone(normalizedReceiverPhone)) return alert(vietnamPhoneError);
 
     try {
       setLoadingSubmit(true);
       const res = (await apiClient.post('/shop/orders', {
         ...formData,
+        receiver_phone: normalizedReceiverPhone,
         id_store: Number(formData.id_store),
         id_dest_area: idDestArea,
         pickup_shift: pickupShift || 'Ca mac dinh',

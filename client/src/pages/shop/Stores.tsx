@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FiMapPin, FiPhone, FiPlus, FiTrash2, FiEdit2 } from 'react-icons/fi';
 import apiClient from '../../api/client';
+import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../../utils/phone';
 import './Stores.css';
 
 const Stores = () => {
@@ -120,12 +121,18 @@ const Stores = () => {
 
   const handleSaveStore = async (e: React.FormEvent) => {
     e.preventDefault();
+    const normalizedPhone = normalizeVietnamPhone(formData.phone);
+    if (!isValidVietnamPhone(normalizedPhone)) {
+      alert(vietnamPhoneError);
+      return;
+    }
+    const payload = { ...formData, phone: normalizedPhone };
     try {
       if (editStoreId) {
-        await apiClient.put(`/shop/stores/${editStoreId}`, formData);
+        await apiClient.put(`/shop/stores/${editStoreId}`, payload);
         alert('Cập nhật kho hàng thành công!');
       } else {
-        await apiClient.post('/shop/stores', formData);
+        await apiClient.post('/shop/stores', payload);
         alert('Thêm kho hàng mới thành công!');
       }
       setShowModal(false);

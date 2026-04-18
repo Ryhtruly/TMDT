@@ -11,6 +11,7 @@ import {
 } from 'react-icons/fi';
 import apiClient from '../api/client';
 import Drawer from '../components/ui/Drawer';
+import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../utils/phone';
 
 const roleColors: Record<string, string> = {
   ADMIN: '#7c3aed',
@@ -268,9 +269,16 @@ const Employees = () => {
     e.preventDefault();
     setFormLoading(true);
     setMessage(null);
+    const normalizedPhone = normalizeVietnamPhone(formData.phone);
+    if (!isValidVietnamPhone(normalizedPhone)) {
+      setMessage({ type: 'error', text: vietnamPhoneError });
+      setFormLoading(false);
+      return;
+    }
     try {
       await apiClient.post('/admin/employees', {
         ...formData,
+        phone: normalizedPhone,
         id_hub: formData.id_hub ? parseInt(formData.id_hub, 10) : undefined,
         id_spoke: formData.id_spoke ? parseInt(formData.id_spoke, 10) : undefined,
       });

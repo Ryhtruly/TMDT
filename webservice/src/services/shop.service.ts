@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { ShopRepository } from '../repositories/shop.repository';
+import { assertValidVietnamPhone } from '../utils/phone';
 
 const shopRepo = new ShopRepository();
 
@@ -26,11 +27,12 @@ export class ShopService {
     }
 
     // Validate mật khẩu chuẩn bảo mật theo Docx
-    const passwordError = validatePassword(password, phone);
+    const normalizedPhone = assertValidVietnamPhone(phone, 'SĐT đăng ký');
+    const passwordError = validatePassword(password, normalizedPhone);
     if (passwordError) throw new Error(passwordError);
 
     // Kiểm tra trùng SĐT
-    const existing = await shopRepo.findUserByPhone(phone);
+    const existing = await shopRepo.findUserByPhone(normalizedPhone);
     if (existing) throw new Error('Số điện thoại này đã được đăng ký. Vui lòng dùng SĐT khác.');
 
     const shopRole = await shopRepo.findRoleByName('SHOP');
@@ -44,7 +46,7 @@ export class ShopService {
       const hashedPassword = await bcrypt.hash(password, salt);
 
       // Tạo User
-      const id_user = await shopRepo.createUser(phone, hashedPassword, client);
+      const id_user = await shopRepo.createUser(normalizedPhone, hashedPassword, client);
 
       // Gán Role SHOP
       await shopRepo.assignRole(id_user, shopRole.id_role, client);
@@ -56,7 +58,7 @@ export class ShopService {
       await shopRepo.createWallet(id_user, client);
 
       await client.query('COMMIT');
-      return { id_user, id_shop, phone, shop_name };
+      return { id_user, id_shop, phone: normalizedPhone, shop_name };
     } catch (error: any) {
       await client.query('ROLLBACK');
       throw error;
@@ -103,9 +105,10 @@ export class ShopService {
     if (!shop) throw new Error('Không tìm thấy Shop.');
     const { store_name, phone, address, description } = storeData;
     if (!store_name || !phone || !address) throw new Error('Thiếu thông tin kho hàng.');
+    const normalizedPhone = assertValidVietnamPhone(phone, 'SĐT liên hệ lấy hàng');
     const client = await shopRepo.getTxClient();
     try {
-      const store = await shopRepo.createStore(shop.id_shop, store_name, phone, address, description, client);
+      const store = await shopRepo.createStore(shop.id_shop, store_name, normalizedPhone, address, description, client);
       return store;
     } finally {
       client.release();
@@ -116,7 +119,8 @@ export class ShopService {
     const shop = await shopRepo.findShopByUserId(id_user);
     if (!shop) throw new Error('Không tìm thấy Shop.');
     const { store_name, phone, address, description } = storeData;
-    const updated = await shopRepo.updateStore(id_store, shop.id_shop, store_name, phone, address, description);
+    const normalizedPhone = assertValidVietnamPhone(phone, 'SĐT liên hệ lấy hàng');
+    const updated = await shopRepo.updateStore(id_store, shop.id_shop, store_name, normalizedPhone, address, description);
     if (!updated) throw new Error('Không tìm thấy kho hàng hoặc kho không thuộc Shop của bạn.');
     return updated;
   }

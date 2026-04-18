@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiPhone, FiLock } from 'react-icons/fi';
 import apiClient from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../utils/phone';
 import './Login.css';
 
 const Login = () => {
@@ -17,10 +18,15 @@ const Login = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const normalizedPhone = normalizeVietnamPhone(phone);
+    if (!isValidVietnamPhone(normalizedPhone)) {
+      setError(vietnamPhoneError);
+      return;
+    }
     setIsLoading(true);
 
     try {
-      const response: any = await apiClient.post('/auth/login', { phone, password });
+      const response: any = await apiClient.post('/auth/login', { phone: normalizedPhone, password });
       if (response?.status === 'success') {
         const checkRole =
           response.user_info?.roles?.includes('ADMIN') || response.user_info?.roles?.includes('STOCKKEEPER');

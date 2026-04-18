@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { FiTruck, FiArrowLeft } from 'react-icons/fi';
 import apiClient from '../../api/client';
 import useAuth from '../../hooks/useAuth';
+import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../../utils/phone';
 import './Auth.css';
 
 const Login = () => {
@@ -20,11 +21,17 @@ const Login = () => {
       return;
     }
 
+    const normalizedPhone = normalizeVietnamPhone(phone);
+    if (!isValidVietnamPhone(normalizedPhone)) {
+      setError(vietnamPhoneError);
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
-      const res = await apiClient.post('/auth/login', { phone, password }) as any;
+      const res = await apiClient.post('/auth/login', { phone: normalizedPhone, password }) as any;
       
       if (res && res.status === 'success') {
         const checkRole = res.user_info?.roles?.includes('SHOP');

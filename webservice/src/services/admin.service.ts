@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { AdminRepository } from '../repositories/admin.repository';
+import { assertValidVietnamPhone } from '../utils/phone';
 
 const adminRepo = new AdminRepository();
 
@@ -22,6 +23,8 @@ export class AdminService {
       throw new Error('Thiếu tham số bắt buộc.');
     }
 
+    const normalizedPhone = assertValidVietnamPhone(phone, 'SĐT nhân sự');
+
     if (!id_hub && !id_spoke) {
       throw new Error('Bắt buộc gán Nhân sự về 1 Hub/Spoke.');
     }
@@ -35,7 +38,7 @@ export class AdminService {
 
       const userRes = await client.query(
         'INSERT INTO users (phone, password, is_active) VALUES ($1, $2, TRUE) RETURNING id_user',
-        [phone, hashedPassword]
+        [normalizedPhone, hashedPassword]
       );
       const id_user = userRes.rows[0].id_user;
 

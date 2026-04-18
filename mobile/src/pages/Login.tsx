@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiSmartphone, FiLock, FiEye, FiEyeOff, FiZap, FiAlertCircle } from 'react-icons/fi';
 import api from '../api/client';
 import useAuth from '../hooks/useAuth';
+import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../utils/phone';
 import './Login.css';
 
 const DEMO_CREDENTIALS = [
@@ -26,9 +27,14 @@ const Login = () => {
       setError('Vui lòng nhập đầy đủ số điện thoại và mật khẩu.');
       return;
     }
+    const normalizedPhone = normalizeVietnamPhone(phone);
+    if (!isValidVietnamPhone(normalizedPhone)) {
+      setError(vietnamPhoneError);
+      return;
+    }
     setLoading(true);
     try {
-      const res: any = await api.post('/auth/login', { phone, password });
+      const res: any = await api.post('/auth/login', { phone: normalizedPhone, password });
       if (res?.status === 'success') {
         const token = res.accessToken;
         const user = res.user_info;

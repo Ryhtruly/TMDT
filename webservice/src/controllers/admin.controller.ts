@@ -253,7 +253,7 @@ export const getServiceTypes = async (req: Request, res: Response): Promise<void
     const data = await adminService.getServiceTypes();
     res.json({ status: 'success', data });
   } catch (error: any) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(400).json({ status: 'error', message: error.message });
   }
 };
 
