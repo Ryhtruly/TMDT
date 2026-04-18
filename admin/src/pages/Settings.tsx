@@ -6,7 +6,9 @@ interface PricingRule {
   id_rule: number;
   route_type: string;
   area_type: string;
-  weight_step: number;
+  goods_type: string;
+  base_weight_g: number;
+  extra_per_500g: number;
   price: number;
 }
 
@@ -21,7 +23,7 @@ const Settings = () => {
   const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState<{ price: number; weight_step: number }>({ price: 0, weight_step: 0 });
+  const [editForm, setEditForm] = useState<{ price: number; base_weight_g: number; extra_per_500g: number }>({ price: 0, base_weight_g: 500, extra_per_500g: 2000 });
   const [loadingRules, setLoadingRules] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
 
@@ -56,7 +58,7 @@ const Settings = () => {
 
   const startEdit = (rule: PricingRule) => {
     setEditingId(rule.id_rule);
-    setEditForm({ price: rule.price, weight_step: rule.weight_step });
+    setEditForm({ price: rule.price, base_weight_g: rule.base_weight_g, extra_per_500g: rule.extra_per_500g });
   };
 
   const handleSaveRule = async (id_rule: number) => {
@@ -65,7 +67,8 @@ const Settings = () => {
       await apiClient.put('/admin/pricing-rules', {
         id_rule,
         price: editForm.price,
-        weight_step: editForm.weight_step,
+        base_weight_g: editForm.base_weight_g,
+        extra_per_500g: editForm.extra_per_500g,
       });
       setEditingId(null);
       fetchPricingRules();
@@ -122,12 +125,14 @@ const Settings = () => {
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th style={{ width: '6%' }}>ID</th>
-                  <th style={{ width: '18%' }}>Loại Tuyến</th>
-                  <th style={{ width: '18%' }}>Khu Vực</th>
-                  <th style={{ width: '20%' }}>Bước Cân (kg)</th>
-                  <th style={{ width: '22%' }}>Đơn Giá (₫)</th>
-                  <th style={{ width: '16%' }} className="text-right">Thao tác</th>
+                  <th style={{ width: '5%' }}>ID</th>
+                  <th style={{ width: '14%' }}>Loại Tuyến</th>
+                  <th style={{ width: '12%' }}>Khu Vực</th>
+                  <th style={{ width: '10%' }}>Nhóm Hàng</th>
+                  <th style={{ width: '14%' }}>Cước Cơ Bản (≤ base)</th>
+                  <th style={{ width: '18%' }}>Giá Base (♤)</th>
+                  <th style={{ width: '18%' }}>Thêm / bước cân (♤)</th>
+                  <th style={{ width: '9%' }} className="text-right">Sửa</th>
                 </tr>
               </thead>
               <tbody>
@@ -136,38 +141,46 @@ const Settings = () => {
                   .map(rule => {
                     const isEditing = editingId === rule.id_rule;
                     const isSaving = savingId === rule.id_rule;
-                    const c = routeTypeColor(rule.route_type);
+                    const isHeavy = rule.goods_type === 'HEAVY';
                     return (
                       <tr key={rule.id_rule}>
                         <td><span className="badge-id">#{rule.id_rule}</span></td>
                         <td>
-                          <span style={{ backgroundColor: c.bg, color: c.color, padding: '3px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 700 }}>
+                          <span style={{ backgroundColor: '#f3f4f6', color: '#374151', padding: '3px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 700 }}>
                             {rule.route_type}
                           </span>
                         </td>
                         <td style={{ fontWeight: 500 }}>{rule.area_type}</td>
                         <td>
-                            {isEditing ? (
-                              <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
-                                <span>Dưới</span>
-                                <input type="number" step="500" className="form-control"
-                                  style={{ padding: '6px 10px', maxWidth: '90px' }}
-                                  value={editForm.weight_step}
-                                  onChange={e => setEditForm({ ...editForm, weight_step: parseFloat(e.target.value) })} />
-                                <span>g</span>
-                              </div>
-                            ) : (
-                              <span style={{ fontWeight: 500 }}>Dưới {rule.weight_step >= 1000 ? `${rule.weight_step / 1000}kg` : `${rule.weight_step}g`}</span>
-                            )}
-                          </td>
+                          <span style={{
+                            backgroundColor: isHeavy ? '#fef3c7' : '#dbeafe',
+                            color: isHeavy ? '#92400e' : '#1d4ed8',
+                            padding: '2px 8px', borderRadius: '10px', fontSize: '0.78rem', fontWeight: 700
+                          }}>
+                            {isHeavy ? '⚖️ Hàng Nặng' : '🫁 Hàng Nhẹ'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '0.82rem', color: '#6b7280' }}>
+                          {isHeavy ? `≤ 20kg` : `≤ ${Number(rule.base_weight_g)/1000}kg`}
+                        </td>
                         <td>
                           {isEditing ? (
-                            <input type="number" className="form-control"
-                              style={{ padding: '6px 10px', maxWidth: '150px' }}
+                            <input type="number" step="500" className="form-control"
+                              style={{ padding: '6px 10px', maxWidth: '120px' }}
                               value={editForm.price}
                               onChange={e => setEditForm({ ...editForm, price: parseFloat(e.target.value) })} />
                           ) : (
-                            <span style={{ fontWeight: 700, color: '#047857' }}>{parseFloat(String(rule.price)).toLocaleString('vi-VN')}₫</span>
+                            <span style={{ fontWeight: 700, color: '#047857' }}>{parseFloat(String(rule.price)).toLocaleString('vi-VN')}♦</span>
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <input type="number" step="500" className="form-control"
+                              style={{ padding: '6px 10px', maxWidth: '120px' }}
+                              value={editForm.extra_per_500g}
+                              onChange={e => setEditForm({ ...editForm, extra_per_500g: parseFloat(e.target.value) })} />
+                          ) : (
+                            <span style={{ fontWeight: 500, color: '#c2410c' }}>+{parseFloat(String(rule.extra_per_500g)).toLocaleString('vi-VN')}♦/{isHeavy ? '1kg' : '500g'}</span>
                           )}
                         </td>
                         <td className="text-right">
@@ -177,7 +190,7 @@ const Settings = () => {
                               onClick={() => handleSaveRule(rule.id_rule)}
                               disabled={isSaving}>
                               {isSaving ? <FiLoader /> : <FiSave />}
-                              {isSaving ? 'Đang lưu...' : 'Lưu'}
+                              {isSaving ? 'Lưu...' : 'Lưu'}
                             </button>
                           ) : (
                             <button className="action-btn text-primary" title="Sửa" onClick={() => startEdit(rule)}>
@@ -189,7 +202,7 @@ const Settings = () => {
                     );
                   })}
                 {pricingRules.filter(r => r.route_type !== 'INSURANCE').length === 0 && (
-                  <tr><td colSpan={6} className="empty-state">Chưa có pricing rules nào.</td></tr>
+                  <tr><td colSpan={8} className="empty-state">Chưa có pricing rules nào.</td></tr>
                 )}
               </tbody>
             </table>

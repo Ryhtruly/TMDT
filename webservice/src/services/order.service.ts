@@ -125,6 +125,7 @@ export class OrderService {
       length = 0,
       width = 0,
       height = 0,
+      goods_type = 'LIGHT',
     } = input;
 
     if (!id_store || !id_dest_area || !weight) {
@@ -153,9 +154,10 @@ export class OrderService {
     const pricingRule = await orderRepo.findBestPricingRule(
       mapPricingRouteTypeForDb(pricingRouteType),
       destArea.area_type,
-      billableWeight
+      billableWeight,
+      goods_type.toUpperCase()
     );
-    const baseFee = pricingRule ? Number(pricingRule.price) : 35000;
+    const baseFee = orderRepo.calcTieredFee(pricingRule, billableWeight);
 
     let serviceMultiplier = 1.0;
     let serviceName = 'Tieu chuan';
@@ -229,6 +231,7 @@ export class OrderService {
       height = 0,
       pickup_shift = null,
       dropoff_spoke_id = null,
+      goods_type = 'LIGHT',
     } = input;
 
     if (!id_store || !receiver_name || !receiver_phone || !receiver_address || !id_dest_area || !weight) {
@@ -258,9 +261,10 @@ export class OrderService {
     const pricingRule = await orderRepo.findBestPricingRule(
       mapPricingRouteTypeForDb(pricingRouteType),
       destArea.area_type,
-      billableWeight
+      billableWeight,
+      goods_type.toUpperCase()
     );
-    const baseFee = pricingRule ? Number(pricingRule.price) : 35000;
+    const baseFee = orderRepo.calcTieredFee(pricingRule, billableWeight);
 
     let serviceMultiplier = 1.0;
     if (id_service_type) {

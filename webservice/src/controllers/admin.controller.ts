@@ -80,15 +80,15 @@ export const setAreaCoverage = async (req: Request, res: Response): Promise<void
 // Cấu hình Bảng Giá Ship
 export const configPricing = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id_rule, price, weight_step } = req.body;
-    const data = await adminService.updatePricingRule(id_rule, price, weight_step);
+    const { id_rule, price, base_weight_g, extra_per_500g } = req.body;
+    const data = await adminService.updatePricingRule(id_rule, price, base_weight_g, extra_per_500g);
     res.json({
       status: 'success',
       message: 'Cập nhật bảng giá thành công!',
       data: data
     });
   } catch (error: any) {
-    res.status(500).json({ status: 'error', message: 'Lạc mất kịch bản Giá Cước!' });
+    res.status(400).json({ status: 'error', message: error.message });
   }
 };
 

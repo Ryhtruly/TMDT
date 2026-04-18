@@ -49,26 +49,30 @@ export class OrderRepository {
     return result.rows;
   }
 
-  // Lấy bảng giá (theo vùng nội/ngoại thành)
-  async findBestPricingRule(route_type: string, area_type: string, weight: number) {
-    // Tính cân nặng quy đổi theo từng nấc (weight_step)
+  // Lấy bảng giá theo loại hàng (LIGHT/HEAVY), vùng và loại tuyến
+  async findBestPricingRule(route_type: string, area_type: string, weight: number, goods_type: string = 'LIGHT') {
     const result = await pool.query(`
       SELECT * FROM pricing_rules
-      WHERE route_type = $1 AND area_type = $2 AND weight_step >= $3
-      ORDER BY weight_step ASC
+      WHERE route_type = $1 AND area_type = $2 AND goods_type = $3
       LIMIT 1
-    `, [route_type, area_type, weight]);
+    `, [route_type, area_type, goods_type]);
+    return result.rows[0] || null;
+  }
 
-    // Nếu không có rule phù hợp, lấy rule lớn nhất (hàng siêu nặng)
-    if (!result.rows[0]) {
-      const fallback = await pool.query(`
-        SELECT * FROM pricing_rules
-        WHERE route_type = $1 AND area_type = $2
-        ORDER BY weight_step DESC LIMIT 1
-      `, [route_type, area_type]);
-      return fallback.rows[0] || null;
-    }
-    return result.rows[0];
+  // Tính phí vận chuyển theo rule + cân nặng thực tế (tiered pricing)
+  calcTieredFee(rule: any, weight: number): number {
+    if (!rule) return 35000;
+    const basePrice = Number(rule.price);
+    const baseWeightG = Number(rule.base_weight_g || 500);
+    const extraPer500 = Number(rule.extra_per_500g || 0);
+    const isHeavy = (rule.goods_type || 'LIGHT') === 'HEAVY';
+
+    if (weight <= baseWeightG) return basePrice;
+
+    const overWeight = weight - baseWeightG;
+    const stepSize = isHeavy ? 1000 : 500; // HEAVY: mỗi 1kg, LIGHT: mỗi 500g
+    const extraSteps = Math.ceil(overWeight / stepSize);
+    return basePrice + extraSteps * extraPer500;
   }
 
   // Khoá ví và kiểm tra số dư (Pessimistic Locking - chống race condition)

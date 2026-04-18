@@ -139,12 +139,12 @@ export class AdminService {
     }
   }
 
-  async updatePricingRule(id_rule: number, price: number, weight_step: number) {
+  async updatePricingRule(id_rule: number, price: number, base_weight_g: number, extra_per_500g: number) {
     const client = await adminRepo.getTxClient();
     try {
       const result = await client.query(
-        'UPDATE pricing_rules SET price = $1, weight_step = $2 WHERE id_rule = $3 RETURNING *',
-        [price, weight_step, id_rule]
+        'UPDATE pricing_rules SET price = $1, base_weight_g = $2, extra_per_500g = $3 WHERE id_rule = $4 RETURNING *',
+        [price, base_weight_g, extra_per_500g, id_rule]
       );
       if (!result.rows[0]) throw new Error(`Không tìm thấy Pricing Rule ID=${id_rule}`);
       return result.rows[0];

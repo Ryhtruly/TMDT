@@ -143,6 +143,12 @@ export class RoutingService {
     
     if (!origin || !dest) throw new Error('Bưu cục không tồn tại.');
 
+    // Kiểm tra trùng lặp
+    const existing = await routingRepo.findExistingRoute(origin_spoke_id, dest_spoke_id);
+    if (existing) {
+      throw new Error(`Tuyến từ "${origin.spoke_name}" đến "${dest.spoke_name}" đã tồn tại (RT-${existing.id_route}). Không thể tạo trùng.`);
+    }
+
     const isSameProvince = origin.id_hub === dest.id_hub;
     const route_type = isSameProvince ? 'Nội tỉnh' : 'Liên Vùng';
     
