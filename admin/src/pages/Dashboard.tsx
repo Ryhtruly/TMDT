@@ -20,7 +20,7 @@ const Dashboard = () => {
           apiClient.get('/admin/audit-log')
         ]);
         if (res.data) {
-          setStats(res.data);
+          setStats(prev => ({ ...prev, ...res.data }));
           if (res.data.chartData) setChartData(res.data.chartData);
         }
         if (logRes.data) setLogs(logRes.data.slice(0, 4));
