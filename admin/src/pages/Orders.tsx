@@ -83,13 +83,14 @@ const Orders = () => {
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th style={{ width: '14%' }}>Mã vận đơn</th>
+                  <th style={{ width: '12%' }}>Mã vận đơn</th>
                   <th style={{ width: '18%' }}>Shop</th>
                   <th style={{ width: '18%' }}>Người nhận</th>
                   <th style={{ width: '10%' }}>Cước phí</th>
                   <th style={{ width: '10%' }}>COD</th>
-                  <th style={{ width: '18%' }}>Trạng thái</th>
-                  <th style={{ width: '12%' }}>Ngày tạo</th>
+                  <th style={{ width: '14%' }}>Trạng thái</th>
+                  <th style={{ width: '10%' }}>Ngày tạo</th>
+                  <th style={{ width: '8%' }} className="text-right">Chi tiết</th>
                 </tr>
               </thead>
               <tbody>
@@ -116,6 +117,9 @@ const Orders = () => {
                       </td>
                       <td style={{ fontSize: '0.8rem', color: '#6b7280' }}>
                         {new Date(o.created_at).toLocaleDateString('vi-VN')}
+                      </td>
+                      <td className="text-right">
+                        <button className="action-btn text-primary" onClick={() => alert(`Xem chi tiết đơn ${o.tracking_code} (Tính năng đang phát triển)`)}>Xem</button>
                       </td>
                     </tr>
                   );

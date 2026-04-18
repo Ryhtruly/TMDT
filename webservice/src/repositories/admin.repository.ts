@@ -199,9 +199,11 @@ export class AdminRepository {
   async getAllOrders(status?: string, limit = 50, offset = 0) {
     const params: any[] = [limit, offset];
     let where = '';
+    let countWhere = '';
     if (status) {
       params.push(status);
       where = `WHERE o.status = $${params.length}`;
+      countWhere = `WHERE o.status = $1`;
     }
     const result = await pool.query(`
       SELECT 
@@ -215,7 +217,10 @@ export class AdminRepository {
       ORDER BY o.created_at DESC
       LIMIT $1 OFFSET $2
     `, params);
-    const countRes = await pool.query(`SELECT COUNT(*) FROM orders ${where ? where.replace(/\$\d+/g, (_m, i) => '$' + (i + 1 - 2)) : ''}`, status ? [status] : []);
+    
+    // Fix: Add table alias 'o' to 'orders' so o.status matches
+    const countRes = await pool.query(`SELECT COUNT(*) FROM orders o ${countWhere}`, status ? [status] : []);
+    
     return { rows: result.rows, total: parseInt(countRes.rows[0].count) };
   }
 

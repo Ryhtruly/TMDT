@@ -147,15 +147,19 @@ const Settings = () => {
                         </td>
                         <td style={{ fontWeight: 500 }}>{rule.area_type}</td>
                         <td>
-                          {isEditing ? (
-                            <input type="number" step="0.5" className="form-control"
-                              style={{ padding: '6px 10px', maxWidth: '120px' }}
-                              value={editForm.weight_step}
-                              onChange={e => setEditForm({ ...editForm, weight_step: parseFloat(e.target.value) })} />
-                          ) : (
-                            <span style={{ fontWeight: 500 }}>{rule.weight_step} kg</span>
-                          )}
-                        </td>
+                            {isEditing ? (
+                              <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
+                                <span>Dưới</span>
+                                <input type="number" step="500" className="form-control"
+                                  style={{ padding: '6px 10px', maxWidth: '90px' }}
+                                  value={editForm.weight_step}
+                                  onChange={e => setEditForm({ ...editForm, weight_step: parseFloat(e.target.value) })} />
+                                <span>g</span>
+                              </div>
+                            ) : (
+                              <span style={{ fontWeight: 500 }}>Dưới {rule.weight_step >= 1000 ? `${rule.weight_step / 1000}kg` : `${rule.weight_step}g`}</span>
+                            )}
+                          </td>
                         <td>
                           {isEditing ? (
                             <input type="number" className="form-control"

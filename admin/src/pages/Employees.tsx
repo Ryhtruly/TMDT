@@ -108,6 +108,10 @@ const Employees = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [roleForm, setRoleForm] = useState({ id_user: '', id_role: '' });
 
+  const selectedRoleName = roles.find((r) => r.id_role === formData.id_role)?.role_name || '';
+  const isHubDisabled = selectedRoleName === 'ADMIN' || selectedRoleName === 'SHIPPER' || (selectedRoleName === 'STOCKKEEPER' && formData.id_spoke !== '');
+  const isSpokeDisabled = selectedRoleName === 'ADMIN' || (selectedRoleName === 'STOCKKEEPER' && formData.id_hub !== '');
+
   const shippers = employees.filter((employee) => (employee.roles || []).includes('SHIPPER'));
   const selectedZoneSpokeId = zoneForm.id_spoke ? parseInt(zoneForm.id_spoke, 10) : null;
   const spokeAreas = selectedZoneSpokeId ? areas.filter((area) => area.id_spoke === selectedZoneSpokeId) : [];
@@ -578,7 +582,7 @@ const Employees = () => {
                   <select
                     name="id_role"
                     value={formData.id_role}
-                    onChange={(e) => setFormData({ ...formData, id_role: parseInt(e.target.value, 10) })}
+                    onChange={(e) => setFormData({ ...formData, id_role: parseInt(e.target.value, 10), id_hub: '', id_spoke: '' })}
                     style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #E5E7EB' }}
                   >
                     {roles.map((role) => (
@@ -593,7 +597,7 @@ const Employees = () => {
               <div className="form-group">
                 <label>Thuộc Hub (Cho NV Hub)</label>
                 <div className="input-wrapper">
-                  <select name="id_hub" value={formData.id_hub} onChange={(e) => setFormData({ ...formData, id_hub: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+                  <select name="id_hub" value={formData.id_hub} disabled={isHubDisabled} onChange={(e) => setFormData({ ...formData, id_hub: e.target.value, id_spoke: e.target.value ? '' : formData.id_spoke })} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: isHubDisabled ? '#f3f4f6' : 'white' }}>
                     <option value="">-- Không trực thuộc Hub --</option>
                     {hubs.map((h) => <option key={h.id_hub} value={h.id_hub}>{h.hub_name}</option>)}
                   </select>
@@ -603,7 +607,7 @@ const Employees = () => {
               <div className="form-group">
                 <label>Thuộc Spoke (Cho NV Spoke / Shipper)</label>
                 <div className="input-wrapper">
-                  <select name="id_spoke" value={formData.id_spoke} onChange={(e) => setFormData({ ...formData, id_spoke: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+                  <select name="id_spoke" value={formData.id_spoke} disabled={isSpokeDisabled} onChange={(e) => setFormData({ ...formData, id_spoke: e.target.value, id_hub: e.target.value ? '' : formData.id_hub })} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: isSpokeDisabled ? '#f3f4f6' : 'white' }}>
                     <option value="">-- Không trực thuộc Spoke --</option>
                     {spokes.map((s) => <option key={s.id_spoke} value={s.id_spoke}>{s.spoke_name} ({s.hub_name})</option>)}
                   </select>
