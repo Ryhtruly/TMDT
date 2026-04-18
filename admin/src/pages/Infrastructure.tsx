@@ -11,12 +11,18 @@ interface Hub {
   description: string;
 }
 
+interface SpokeArea {
+  district: string;
+  province: string;
+  area_type: string;
+}
+
 interface Spoke {
   id_spoke: number;
   spoke_name: string;
   hub_name: string;
   id_hub: number;
-  area_name?: string;
+  areas?: SpokeArea[];
 }
 
 const Infrastructure = () => {
@@ -321,10 +327,11 @@ const Infrastructure = () => {
                   </tr>
                 ) : (
                   <tr>
-                    <th style={{ width: '10%' }}>ID</th>
-                    <th style={{ width: '30%' }}>Tên Bưu Cục (Spoke)</th>
-                    <th style={{ width: '30%' }}>Thuộc Hub Quản Lý</th>
-                    <th style={{ width: '15%' }} className="text-right">Thao tác</th>
+                    <th style={{ width: '8%' }}>ID</th>
+                    <th style={{ width: '22%' }}>Tên Bưu Cục (Spoke)</th>
+                    <th style={{ width: '22%' }}>Thuộc Hub Quản Lý</th>
+                    <th style={{ width: '36%' }}>Khu Vực Phụ Trách</th>
+                    <th style={{ width: '12%' }} className="text-right">Thao tác</th>
                   </tr>
                 )}
               </thead>
@@ -355,6 +362,23 @@ const Infrastructure = () => {
                     <td><span className="badge-id">SPK-{spoke.id_spoke}</span></td>
                     <td className="font-medium">{spoke.spoke_name}</td>
                     <td><span className="badge-hub">{spoke.hub_name}</span></td>
+                    <td>
+                      {spoke.areas && spoke.areas.length > 0 ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {spoke.areas.map((a, i) => (
+                            <span key={i} style={{
+                              backgroundColor: a.area_type === 'NỘI THÀNH' ? '#dbeafe' : '#fef9c3',
+                              color: a.area_type === 'NỘI THÀNH' ? '#1d4ed8' : '#854d0e',
+                              padding: '2px 7px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 600
+                            }}>
+                              {a.district}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '0.85rem' }}>Chưa phân vùng</span>
+                      )}
+                    </td>
                     <td className="text-right">
                       <button className="action-btn text-primary" onClick={() => openEditDrawer('EDIT_SPOKE', spoke)} style={{ marginRight: '8px' }}><FiEdit2 /></button>
                       <button className="action-btn" style={{ color: '#ef4444' }} onClick={() => handleDelete(spoke.id_spoke, 'spoke')} title="Đóng cửa / Xóa"><FiTrash2 /></button>
