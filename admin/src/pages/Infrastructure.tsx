@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { FiPlus, FiEdit2, FiServer, FiMapPin, FiMap, FiTrash2, FiMonitor } from 'react-icons/fi';
+import { FiPlus, FiEdit2, FiServer, FiMapPin, FiMap, FiTrash2 } from 'react-icons/fi';
 import apiClient from '../api/client';
 import Drawer from '../components/ui/Drawer';
-import NetworkGraph3D from '../components/NetworkGraph3D';
 import './Infrastructure.css';
 
 interface Hub {
@@ -29,7 +28,7 @@ const Infrastructure = () => {
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [spokes, setSpokes] = useState<Spoke[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'hubs' | 'spokes' | 'areas' | 'topology'>('hubs');
+  const [activeTab, setActiveTab] = useState<'hubs' | 'spokes' | 'areas'>('hubs');
 
   // Drawer States
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -287,15 +286,10 @@ const Infrastructure = () => {
           <button className={`tab-btn ${activeTab === 'areas' ? 'active' : ''}`} onClick={() => setActiveTab('areas')}>
             <FiMap className="tab-icon" /> Phân Vùng ({areas.length})
           </button>
-          <button className={`tab-btn ${activeTab === 'topology' ? 'active' : ''}`} onClick={() => setActiveTab('topology')}>
-            <FiMonitor className="tab-icon" /> Bản Đồ 3D
-          </button>
         </div>
 
         <div className="table-container">
-          {activeTab === 'topology' ? (
-            <NetworkGraph3D hubs={hubs} spokes={spokes} />
-          ) : activeTab === 'areas' ? (
+          {activeTab === 'areas' ? (
             <table className="admin-table">
               <thead><tr>
                 <th>ID</th><th>Tỉnh/Thành</th><th>Quận/Huyện</th><th>Loại</th><th>Bưu cục phụ trách</th>
