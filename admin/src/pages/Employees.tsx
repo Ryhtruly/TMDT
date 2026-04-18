@@ -76,6 +76,7 @@ const Employees = () => {
   const [wardOptions, setWardOptions] = useState<any[]>([]);
   const [shipperSearchText, setShipperSearchText] = useState('');
   const [searchText, setSearchText] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [listLoading, setListLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'list' | 'create' | 'zones'>('list');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -229,16 +230,24 @@ const Employees = () => {
 
   useEffect(() => {
     const q = searchText.toLowerCase();
-    setFiltered(
-      employees.filter(
-        (employee) =>
-          employee.full_name?.toLowerCase().includes(q) ||
-          employee.email?.toLowerCase().includes(q) ||
-          employee.phone?.includes(q) ||
-          (employee.roles || []).join(' ').toLowerCase().includes(q)
-      )
+    let result = employees.filter(
+      (employee) =>
+        employee.full_name?.toLowerCase().includes(q) ||
+        employee.email?.toLowerCase().includes(q) ||
+        employee.phone?.includes(q) ||
+        (employee.roles || []).join(' ').toLowerCase().includes(q)
     );
-  }, [employees, searchText]);
+    if (roleFilter !== 'ALL') {
+      result = result.filter((emp) => (emp.roles || []).includes(roleFilter));
+    }
+    result = [...result].sort((a, b) => {
+      const order: Record<string, number> = { ADMIN: 0, STOCKKEEPER: 1, SHIPPER: 2 };
+      const aRole = (a.roles || [])[0] || 'ZZ';
+      const bRole = (b.roles || [])[0] || 'ZZ';
+      return (order[aRole] ?? 9) - (order[bRole] ?? 9);
+    });
+    setFiltered(result);
+  }, [employees, searchText, roleFilter]);
 
   const fetchEmployees = async () => {
     setListLoading(true);
@@ -411,7 +420,7 @@ const Employees = () => {
 
         {activeTab === 'list' && (
           <>
-            <div style={{ padding: '16px 0 8px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div style={{ padding: '16px 0 8px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
               <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
                 <FiSearch
                   style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }}
@@ -425,6 +434,17 @@ const Employees = () => {
                   onChange={(e) => setSearchText(e.target.value)}
                 />
               </div>
+              <select
+                className="form-control"
+                style={{ maxWidth: '180px', padding: '8px 12px' }}
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+              >
+                <option value="ALL">Tất cả vai trò</option>
+                <option value="ADMIN">ADMIN</option>
+                <option value="STOCKKEEPER">STOCKKEEPER</option>
+                <option value="SHIPPER">SHIPPER</option>
+              </select>
               <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>
                 Hien thi {filtered.length}/{employees.length} nhan vien
               </span>

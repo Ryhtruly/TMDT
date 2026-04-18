@@ -15,6 +15,7 @@ const CreateOrder = () => {
   const [provinces, setProvinces] = useState<any[]>([]);
   const [districts, setDistricts] = useState<any[]>([]);
   const [wards, setWards] = useState<any[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<any[]>([]);
 
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [addressModalType, setAddressModalType] = useState<'RECEIVER' | 'SENDER' | null>(null);
@@ -40,7 +41,8 @@ const CreateOrder = () => {
     receiver_address: '',
     payer_type: 'SENDER',
     fee_payment_method: 'WALLET',
-    id_service_type: Number(paramType),
+    id_service_type: 1,
+    goods_type: paramType === '2' ? 'HEAVY' : 'LIGHT',
     weight: paramType === '2' ? 20000 : 200,
     item_value: 0,
     cod_amount: 0,
@@ -55,7 +57,7 @@ const CreateOrder = () => {
   useEffect(() => {
     setFormData((prev) => ({
       ...prev,
-      id_service_type: Number(paramType),
+      goods_type: paramType === '2' ? 'HEAVY' : 'LIGHT',
       weight: paramType === '2' ? 20000 : prev.weight === 20000 ? 200 : prev.weight,
     }));
   }, [paramType]);
@@ -80,6 +82,9 @@ const CreateOrder = () => {
 
       const spokeRes = (await apiClient.get('/shop/spokes').catch(() => null)) as any;
       if (spokeRes?.status === 'success') setSpokes(spokeRes.data);
+
+      const svcRes = (await apiClient.get('/shop/orders/service-types').catch(() => null)) as any;
+      if (svcRes) setServiceTypes(svcRes.data || []);
     };
 
     load().catch(console.error);
@@ -169,6 +174,7 @@ const CreateOrder = () => {
           payer_type: formData.payer_type,
           fee_payment_method: formData.fee_payment_method,
           id_service_type: Number(formData.id_service_type),
+          goods_type: formData.goods_type,
           weight: Number(formData.weight),
           item_value: Number(formData.item_value || 0),
           cod_amount: Number(formData.cod_amount || 0),
@@ -325,10 +331,26 @@ const CreateOrder = () => {
           </div>
 
           <div className="ghn-card">
-            <div className="ghn-card-title">Goi dich vu</div>
-            <div className="service-cards">
-              <label className={`service-card ${formData.id_service_type === 1 ? 'active' : ''}`}><div className="service-card-header"><input type="radio" checked={formData.id_service_type === 1} onChange={() => setFormData((p) => ({ ...p, id_service_type: 1 }))} /> <FiBox /> Hang nhe (&lt; 20kg)</div></label>
-              <label className={`service-card ${formData.id_service_type === 2 ? 'active' : ''}`}><div className="service-card-header"><input type="radio" checked={formData.id_service_type === 2} onChange={() => setFormData((p) => ({ ...p, id_service_type: 2 }))} /> <FiBox /> Hang nang (&gt;= 20kg)</div></label>
+            <div className="ghn-card-title">Nhóm Hàng Hóa & Cước Phí</div>
+            <div className="service-cards" style={{ marginBottom: '20px' }}>
+              <label className={`service-card ${formData.goods_type === 'LIGHT' ? 'active' : ''}`}><div className="service-card-header"><input type="radio" checked={formData.goods_type === 'LIGHT'} onChange={() => setFormData((p) => ({ ...p, goods_type: 'LIGHT', weight: p.weight >= 20000 ? 500 : p.weight }))} /> <FiBox /> Hàng nhe (&lt; 20kg)</div></label>
+              <label className={`service-card ${formData.goods_type === 'HEAVY' ? 'active' : ''}`}><div className="service-card-header"><input type="radio" checked={formData.goods_type === 'HEAVY'} onChange={() => setFormData((p) => ({ ...p, goods_type: 'HEAVY', weight: p.weight < 20000 ? 20000 : p.weight }))} /> <FiBox /> Hàng nang (&gt;= 20kg)</div></label>
+            </div>
+
+            <div className="ghn-card-title">Dịch Vụ Vận Chuyển</div>
+            <div className="service-cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+              {serviceTypes.map(svc => (
+                <label key={svc.id_service} className={`service-card ${formData.id_service_type === svc.id_service ? 'active' : ''}`}>
+                  <div className="service-card-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+                      <input type="radio" checked={formData.id_service_type === svc.id_service} onChange={() => setFormData((p) => ({ ...p, id_service_type: svc.id_service }))} />
+                      <span style={{ fontWeight: 600 }}>{svc.service_name}</span>
+                    </div>
+                    <span style={{ fontSize: '0.8rem', color: '#6b7280', paddingLeft: '24px' }}>{svc.description} - x{parseFloat(svc.base_multiplier).toFixed(1)}</span>
+                  </div>
+                </label>
+              ))}
+              {serviceTypes.length === 0 && <div style={{ fontSize: '13px', color: '#6b7280' }}>Đang tải dịch vụ...</div>}
             </div>
           </div>
         </div>
