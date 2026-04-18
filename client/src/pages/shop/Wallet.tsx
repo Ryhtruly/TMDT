@@ -122,11 +122,15 @@ const Wallet = () => {
     e.preventDefault();
     if (topupAmount <= 0) return alert('So tien khong hop le.');
     try {
-      await apiClient.post('/shop/wallet/topup', { amount: topupAmount });
-      alert('Nap tien thanh cong.');
-      setShowTopupModal(false);
-      setTopupAmount(0);
-      fetchDocs();
+      const res: any = await apiClient.post('/shop/wallet/topup', { amount: topupAmount });
+      if (res?.checkoutUrl) {
+         window.location.href = res.checkoutUrl;
+      } else {
+         alert('Nap tien thanh cong.');
+         setShowTopupModal(false);
+         setTopupAmount(0);
+         fetchDocs();
+      }
     } catch (err: any) {
       alert(err.response?.data?.message || 'Co loi khi nap tien.');
     }
