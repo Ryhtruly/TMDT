@@ -66,6 +66,7 @@ const normalizeDistrictName = (value: string) =>
 const Employees = () => {
   const [employees, setEmployees] = useState<any[]>([]);
   const [filtered, setFiltered] = useState<any[]>([]);
+  const [hubs, setHubs] = useState<any[]>([]);
   const [spokes, setSpokes] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [roles, setRoles] = useState<{ id_role: number; role_name: string }[]>([]);
@@ -147,6 +148,7 @@ const Employees = () => {
     apiClient
       .get('/admin/infrastructure')
       .then((res: any) => {
+        setHubs(res.data?.hubs || []);
         setSpokes(res.data?.spokes || []);
         setAreas(res.data?.areas || []);
       })
@@ -589,16 +591,22 @@ const Employees = () => {
               </div>
 
               <div className="form-group">
-                <label>Hub ID</label>
+                <label>Thuộc Hub (Cho NV Hub)</label>
                 <div className="input-wrapper">
-                  <input type="number" name="id_hub" value={formData.id_hub} onChange={(e) => setFormData({ ...formData, id_hub: e.target.value })} />
+                  <select name="id_hub" value={formData.id_hub} onChange={(e) => setFormData({ ...formData, id_hub: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+                    <option value="">-- Không trực thuộc Hub --</option>
+                    {hubs.map((h) => <option key={h.id_hub} value={h.id_hub}>{h.hub_name}</option>)}
+                  </select>
                 </div>
               </div>
 
               <div className="form-group">
-                <label>Spoke ID</label>
+                <label>Thuộc Spoke (Cho NV Spoke / Shipper)</label>
                 <div className="input-wrapper">
-                  <input type="number" name="id_spoke" value={formData.id_spoke} onChange={(e) => setFormData({ ...formData, id_spoke: e.target.value })} />
+                  <select name="id_spoke" value={formData.id_spoke} onChange={(e) => setFormData({ ...formData, id_spoke: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+                    <option value="">-- Không trực thuộc Spoke --</option>
+                    {spokes.map((s) => <option key={s.id_spoke} value={s.id_spoke}>{s.spoke_name} ({s.hub_name})</option>)}
+                  </select>
                 </div>
               </div>
 

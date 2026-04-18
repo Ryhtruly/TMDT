@@ -58,7 +58,7 @@ const Routes = () => {
     setLoadingDetail(true);
     try {
       const res: any = await apiClient.get(`/routes/${route.id_route}`);
-      setStopDetail(res?.stops || []);
+      setStopDetail(res?.data?.nodes || []);
     } catch (err) {
       console.error(err);
       setStopDetail([]);
@@ -199,15 +199,15 @@ const Routes = () => {
                             <div style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Đang tải...</div>
                           ) : stopDetail.length > 0 ? (
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                              {stopDetail.map((stop, idx) => (
-                                <span key={stop.id_stop} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <span style={{
-                                    backgroundColor: stop.stop_type === 'HUB' ? '#ede9fe' : '#dbeafe',
-                                    color: stop.stop_type === 'HUB' ? '#6d28d9' : '#1d4ed8',
-                                    padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600
-                                  }}>
-                                    {stop.stop_type === 'HUB' ? '🏭' : '📍'} {stop.hub_name || stop.spoke_name || `Stop-${stop.id_stop}`}
-                                  </span>
+                                {stopDetail.map((stop: any, idx: number) => (
+                                  <span key={stop.id_route_node || idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{
+                                      backgroundColor: stop.location_type === 'HUB' ? '#ede9fe' : '#dbeafe',
+                                      color: stop.location_type === 'HUB' ? '#6d28d9' : '#1d4ed8',
+                                      padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600
+                                    }}>
+                                      {stop.location_type === 'HUB' ? '🏭' : '📍'} {stop.location_name}
+                                    </span>
                                   {idx < stopDetail.length - 1 && <FiArrowRight style={{ color: '#9ca3af' }} />}
                                 </span>
                               ))}

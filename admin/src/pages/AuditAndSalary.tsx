@@ -9,6 +9,7 @@ const AuditAndSalary = () => {
   const [salaryLoading, setSalaryLoading] = useState(false);
   const [salaryMonth, setSalaryMonth] = useState('2026-04');
   const [idShipper, setIdShipper] = useState('');
+  const [shippers, setShippers] = useState<any[]>([]);
   const [salaryHistory, setSalaryHistory] = useState<any[]>([]);
   const [salaryHistoryLoading, setSalaryHistoryLoading] = useState(false);
   const [salaryMsg, setSalaryMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -24,6 +25,18 @@ const AuditAndSalary = () => {
       fetchSalaryHistory();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    const fetchShippers = async () => {
+      try {
+        const res: any = await apiClient.get('/admin/employees');
+        setShippers((res.data || []).filter((e: any) => (e.roles || []).includes('SHIPPER')));
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchShippers();
+  }, []);
 
   const fetchLogs = async () => {
     setLogLoading(true);
@@ -126,9 +139,11 @@ const AuditAndSalary = () => {
 
                 <form onSubmit={handleComputeSalary} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>ID Tài xế (Shipper)</label>
-                    <input type="number" required className="form-control" placeholder="VD: 5"
-                      value={idShipper} onChange={e => setIdShipper(e.target.value)} />
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Tài xế (Shipper)</label>
+                    <select required className="form-control" value={idShipper} onChange={e => setIdShipper(e.target.value)}>
+                      <option value="">-- Chọn tài xế cần quyết toán --</option>
+                      {shippers.map(s => <option key={s.id_employee} value={s.id_user}>EMP-{s.id_employee} : {s.full_name} ({s.phone})</option>)}
+                    </select>
                   </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Tháng Quyết Toán</label>
