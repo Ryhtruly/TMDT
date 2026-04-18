@@ -26,11 +26,16 @@ interface RouteStop {
 
 const Routes = () => {
   const [routes, setRoutes] = useState<RouteNode[]>([]);
+  const [spokes, setSpokes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [stopDetail, setStopDetail] = useState<RouteStop[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  
+  const [isAutoModalOpen, setIsAutoModalOpen] = useState(false);
+  const [autoForm, setAutoForm] = useState({ origin_spoke_id: '', dest_spoke_id: '' });
+  const [autoLoading, setAutoLoading] = useState(false);
 
   useEffect(() => {
     fetchRoutes();
@@ -39,12 +44,33 @@ const Routes = () => {
   const fetchRoutes = async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get('/routes');
+      const [res, infraRes] = await Promise.all([
+        apiClient.get('/routes'),
+        apiClient.get('/admin/infrastructure')
+      ]) as [any, any];
       setRoutes(res?.data || []);
+      if (infraRes?.data?.spokes) {
+        setSpokes(infraRes.data.spokes);
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAutoGenerate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAutoLoading(true);
+    try {
+      await apiClient.post('/admin/routes/auto-generate', autoForm);
+      alert('Thiết lập tuyến đường thành công!');
+      setIsAutoModalOpen(false);
+      fetchRoutes(); // Phục hồi ds
+    } catch (err: any) {
+      alert('Lỗi khi thiết lập: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setAutoLoading(false);
     }
   };
 
@@ -117,14 +143,18 @@ const Routes = () => {
       </div>
 
       <div className="admin-card">
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
+          <div style={{ position: 'relative', width: '300px' }}>
             <FiSearch style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
             <input type="text" className="form-control" placeholder="Tìm Hub xuất phát hoặc Hub đích..."
               style={{ paddingLeft: '36px' }}
-              value={searchText} onChange={e => setSearchText(e.target.value)} />
+              value={searchText} onChange={(e) => setSearchText(e.target.value)} />
           </div>
-          <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>{filtered.length}/{routes.length} tuyến</span>
+          <div>
+            <button className="btn-primary" onClick={() => setIsAutoModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>✨</span> Tạo Tuyến Tự Động
+            </button>
+          </div>
         </div>
 
         <div className="table-container">
@@ -228,6 +258,36 @@ const Routes = () => {
           )}
         </div>
       </div>
+
+      {isAutoModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '500px' }}>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>Tạo Tuyến Đường Tự Động</h2>
+            <form onSubmit={handleAutoGenerate} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Điểm Xuất Phát (Spoke)</label>
+                <select className="form-control" required value={autoForm.origin_spoke_id} onChange={e => setAutoForm({...autoForm, origin_spoke_id: e.target.value})}>
+                  <option value="">-- Chọn bưu cục gửi --</option>
+                  {spokes.map(s => <option key={s.id_spoke} value={s.id_spoke}>{s.spoke_name} ({s.hub_name})</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Điểm Đích (Spoke)</label>
+                <select className="form-control" required value={autoForm.dest_spoke_id} onChange={e => setAutoForm({...autoForm, dest_spoke_id: e.target.value})}>
+                  <option value="">-- Chọn bưu cục nhận --</option>
+                  {spokes.map(s => <option key={s.id_spoke} value={s.id_spoke}>{s.spoke_name} ({s.hub_name})</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setIsAutoModalOpen(false)}>Hủy</button>
+                <button type="submit" className="btn-primary" disabled={autoLoading}>
+                  {autoLoading ? 'Đang tạo...' : 'Xác nhận tạo tuyến'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AdminService } from '../services/admin.service';
+import { routingService } from '../services/routing.service';
 
 const adminService = new AdminService();
 
@@ -28,6 +29,23 @@ export const createHub = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
+export const autoGenerateRoute = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { origin_spoke_id, dest_spoke_id } = req.body;
+    if (!origin_spoke_id || !dest_spoke_id) {
+      throw new Error('Thiếu tham số điểm xuất phát hoặc điểm đích.');
+    }
+    const data = await routingService.autoGenerateRoute(parseInt(origin_spoke_id), parseInt(dest_spoke_id));
+    res.json({
+      status: 'success',
+      message: 'Thiết lập và phân giải tuyến đường tự động thành công!',
+      data
+    });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
   }
 };
 

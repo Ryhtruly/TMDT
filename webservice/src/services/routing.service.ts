@@ -133,4 +133,65 @@ export class RoutingService {
     if (!nodes.length) throw new Error('Route không tồn tại.');
     return { id_route, nodes };
   }
+
+  // ==== AUTO-GENERATE ALGORITHM ====
+  async autoGenerateRoute(origin_spoke_id: number, dest_spoke_id: number) {
+    if (origin_spoke_id === dest_spoke_id) throw new Error('Bưu cục phát và bưu cục nhận không được trùng nhau.');
+    
+    const origin = await routingRepo.getSpokeWithLocation(origin_spoke_id);
+    const dest = await routingRepo.getSpokeWithLocation(dest_spoke_id);
+    
+    if (!origin || !dest) throw new Error('Bưu cục không tồn tại.');
+
+    const isSameProvince = origin.id_hub === dest.id_hub;
+    const route_type = isSameProvince ? 'Nội tỉnh' : 'Liên Vùng';
+    
+    const hubOrigin = await routingRepo.getHubWithLocation(origin.id_hub);
+    const hubDest = await routingRepo.getHubWithLocation(dest.id_hub);
+
+    // Xây dựng danh sách các chặng
+    const routeNodesToInsert = [];
+    
+    // Node 1: Spoke Phát
+    routeNodesToInsert.push({ id_location: origin.id_location, is_intermediate: false });
+    
+    if (isSameProvince) {
+      // Nội tỉnh: Spoke Phát -> Hub Chung -> Spoke Nhận
+      routeNodesToInsert.push({ id_location: hubOrigin.id_location, is_intermediate: true });
+    } else {
+      // Liên Vùng: Spoke Phát -> Hub Kéo -> Hub Đẩy -> Spoke Nhận
+      routeNodesToInsert.push({ id_location: hubOrigin.id_location, is_intermediate: true });
+      routeNodesToInsert.push({ id_location: hubDest.id_location, is_intermediate: true });
+    }
+    
+    // Node Cuối: Spoke Nhận
+    routeNodesToInsert.push({ id_location: dest.id_location, is_intermediate: false });
+
+    // Tạo Route vào DB với transaction
+    const client = await routingRepo.getTxClient();
+    try {
+      await client.query('BEGIN');
+      const id_route = await routingRepo.createRoute(origin_spoke_id, dest_spoke_id, route_type, routeNodesToInsert.length, client);
+
+      // Chèn các nodes vào DB
+      for (let i = 0; i < routeNodesToInsert.length; i++) {
+        await routingRepo.addRouteNode(id_route, routeNodesToInsert[i].id_location, i + 1, routeNodesToInsert[i].is_intermediate, client);
+      }
+      await client.query('COMMIT');
+      
+      return { 
+        id_route, 
+        route_type, 
+        origin_spoke_id, 
+        dest_spoke_id, 
+        total_nodes: routeNodesToInsert.length 
+      };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
 }
+export const routingService = new RoutingService();

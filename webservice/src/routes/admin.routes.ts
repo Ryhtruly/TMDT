@@ -7,7 +7,7 @@ import {
   configPricing, getAllRoles, grantRole, revokeRole, setInsuranceConfig,
   getEmployees, deactivateEmployee, getAllShops, getAllOrders, getAllBags,
   getPricingRules, getServiceTypes, getShipperWardAssignments,
-  createShipperWardAssignment, deleteShipperWardAssignment
+  createShipperWardAssignment, deleteShipperWardAssignment, autoGenerateRoute
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -17,6 +17,9 @@ const router = Router();
 // ==========================================
 router.use(verifyToken);
 router.use(checkRoles(['ADMIN'])); 
+
+// API Auto-Generate Tuyến Đường
+router.post('/routes/auto-generate', autoGenerateRoute);
 
 // API Khởi Tạo Nhân Viên Mới (Kèm phân Hub/Spoke/Role)
 router.post('/employees', createEmployee);

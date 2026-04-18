@@ -116,4 +116,15 @@ export class RoutingRepository {
   async getTxClient() {
     return await pool.connect();
   }
+
+  // ==== AUTO GENERATE ROUTE METHODS ====
+  async getSpokeWithLocation(id_spoke: number) {
+    const result = await pool.query('SELECT * FROM spokes WHERE id_spoke = $1', [id_spoke]);
+    return result.rows[0] || null;
+  }
+
+  async getHubWithLocation(id_hub: number) {
+    const result = await pool.query('SELECT * FROM hubs WHERE id_hub = $1', [id_hub]);
+    return result.rows[0] || null;
+  }
 }
