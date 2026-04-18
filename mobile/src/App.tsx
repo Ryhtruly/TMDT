@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ShipperLayout from './components/layout/ShipperLayout';
 import Login from './pages/Login';
+import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 import Tasks from './pages/Tasks';
 import Scanner from './pages/Scanner';
@@ -16,6 +18,8 @@ function App() {
     <Routes>
       {/* Auth */}
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* Shipper Protected Pages */}
       <Route element={<ShipperLayout />}>

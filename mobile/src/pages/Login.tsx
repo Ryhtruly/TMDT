@@ -1,15 +1,10 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FiSmartphone, FiLock, FiEye, FiEyeOff, FiZap, FiAlertCircle } from 'react-icons/fi';
+import { useNavigate, Link } from 'react-router-dom';
+import { FiSmartphone, FiLock, FiEye, FiEyeOff, FiAlertCircle } from 'react-icons/fi';
 import api from '../api/client';
 import useAuth from '../hooks/useAuth';
 import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../utils/phone';
 import './Login.css';
-
-const DEMO_CREDENTIALS = [
-  { label: 'Shipper 1', phone: '0933445566', pass: 'Shipper1@123' },
-  { label: 'Thủ kho (Demo)', phone: '0999000222', pass: '111' }, // Dummy password for fallback visualization if we add one, actually let's use a real one if I know
-];
 
 const Login = () => {
   const { login } = useAuth();
@@ -49,7 +44,6 @@ const Login = () => {
         
         login(token, user);
         
-        // Điều hướng thông minh dựa trên Role
         if (isShipper) {
           navigate('/dashboard');
         } else if (isStockkeeper) {
@@ -63,42 +57,16 @@ const Login = () => {
     }
   };
 
-  const fillDemo = (cred: typeof DEMO_CREDENTIALS[0]) => {
-    setPhone(cred.phone);
-    setPassword(cred.pass);
-    setError('');
-  };
-
   return (
     <div className="login-page">
-      {/* Animated background orbs */}
-      <div className="login-orb login-orb-1" />
-      <div className="login-orb login-orb-2" />
-      <div className="login-orb login-orb-3" />
-
       <div className="login-container">
         {/* ===== HERO TOP ===== */}
         <div className="login-hero">
-          <div className="login-logo">
-            <div className="login-logo-ring">
-              <div className="login-logo-inner">
-                <FiZap size={30} />
-              </div>
-            </div>
-          </div>
-          <div className="login-moto-art">
-            {/* CSS art delivery scooter */}
-            <div className="scooter">
-              <div className="scooter-body" />
-              <div className="scooter-wheel scooter-wheel-front" />
-              <div className="scooter-wheel scooter-wheel-back" />
-              <div className="scooter-speed-line sl-1" />
-              <div className="scooter-speed-line sl-2" />
-              <div className="scooter-speed-line sl-3" />
-            </div>
+          <div className="login-logo-static">
+            <span className="login-logo-icon">🚀</span>
           </div>
           <h1 className="login-title">GHST Logistics</h1>
-          <p className="login-subtitle">Đăng nhập để bắt đầu ca làm việc ⚡</p>
+          <p className="login-subtitle">Đăng nhập để bắt đầu ca làm việc</p>
         </div>
 
         {/* ===== FORM CARD ===== */}
@@ -106,9 +74,7 @@ const Login = () => {
           <form onSubmit={handleSubmit} className="login-form" noValidate>
             {/* Phone */}
             <div className="login-field">
-              <label className="login-label" htmlFor="login-phone">
-                Số điện thoại
-              </label>
+              <label className="login-label" htmlFor="login-phone">Số điện thoại</label>
               <div className="login-input-wrap">
                 <FiSmartphone className="login-icon" size={17} />
                 <input
@@ -127,9 +93,7 @@ const Login = () => {
 
             {/* Password */}
             <div className="login-field">
-              <label className="login-label" htmlFor="login-pass">
-                Mật khẩu
-              </label>
+              <label className="login-label" htmlFor="login-pass">Mật khẩu</label>
               <div className="login-input-wrap">
                 <FiLock className="login-icon" size={17} />
                 <input
@@ -153,6 +117,11 @@ const Login = () => {
               </div>
             </div>
 
+            {/* Forgot Password link */}
+            <div className="login-forgot-wrap">
+              <Link to="/forgot-password" className="login-forgot-link">Quên mật khẩu?</Link>
+            </div>
+
             {/* Error */}
             {error && (
               <div className="login-error animate-slide-up">
@@ -164,7 +133,7 @@ const Login = () => {
             {/* Submit */}
             <button
               type="submit"
-              className="btn-primary login-submit"
+              className="login-submit-btn"
               disabled={loading}
             >
               {loading ? (
@@ -173,32 +142,15 @@ const Login = () => {
                   Đang đăng nhập...
                 </>
               ) : (
-                '⚡ Bắt Đầu Ca Làm Việc'
+                'Đăng Nhập'
               )}
             </button>
           </form>
 
-          {/* Demo credentials */}
-          <div className="login-demo">
-            <div className="login-demo-label">
-              <span>Tài khoản thử nghiệm</span>
-            </div>
-            <div className="login-demo-list">
-              {DEMO_CREDENTIALS.map(c => (
-                <button
-                  key={c.phone}
-                  className="login-demo-btn"
-                  onClick={() => fillDemo(c)}
-                  type="button"
-                >
-                  <div className="demo-avatar">{c.label[c.label.length - 1]}</div>
-                  <div>
-                    <div className="demo-name">{c.label}</div>
-                    <div className="demo-phone">{c.phone}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
+          {/* Register Link */}
+          <div className="login-register-wrap">
+            <span>Chưa có tài khoản?</span>
+            <Link to="/register" className="login-register-link">Đăng ký ngay</Link>
           </div>
         </div>
 

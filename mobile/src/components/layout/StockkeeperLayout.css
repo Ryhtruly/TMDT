@@ -11,7 +11,7 @@
   max-width: var(--max-width);
   width: 100%;
   margin: 0 auto;
-  background: var(--slate-50);
+  background: #f5f5f0; /* warm off-white, warehouse feel */
   position: relative;
   isolation: isolate;
 }
@@ -19,13 +19,13 @@
 /* --- Top Header --- */
 .stock-header {
   height: var(--header-height);
-  background: rgba(15, 23, 42, 0.97);
+  background: #1c1917; /* warm dark brown, like warehouse steel */
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   position: sticky;
   top: 0;
   z-index: 100;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15); /* amber border */
   flex-shrink: 0;
 }
 
@@ -47,12 +47,12 @@
   width: 32px;
   height: 32px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); /* amber warehouse */
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  box-shadow: 0 3px 10px rgba(242, 101, 34, 0.4);
+  box-shadow: 0 3px 10px rgba(245, 158, 11, 0.35);
   flex-shrink: 0;
   font-size: 16px;
 }
@@ -65,7 +65,7 @@
 }
 
 .stock-logo-ghst {
-  color: var(--primary);
+  color: #f59e0b; /* amber accent */
 }
 
 .stock-user-chip {
@@ -114,7 +114,7 @@
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding-bottom: calc(var(--bottom-nav-height) + 8px);
-  background: var(--slate-50);
+  background: #f5f5f0;
 }
 
 /* --- Bottom Nav --- */
@@ -166,9 +166,9 @@
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Active state */
+/* Active state — amber for warehouse */
 .stock-bottom-nav .nav-item.active {
-  color: var(--primary);
+  color: #f59e0b;
 }
 
 .stock-bottom-nav .nav-item.active svg {
@@ -189,7 +189,7 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--primary);
+  background: #f59e0b;
 }
 
 /* Hover state */
