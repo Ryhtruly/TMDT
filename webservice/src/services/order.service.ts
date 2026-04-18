@@ -1,6 +1,7 @@
 import { OrderRepository } from '../repositories/order.repository';
 import { ShopRepository } from '../repositories/shop.repository';
 import { getRegionByProvince, normalizeProvinceName } from '../utils/location';
+import { assertValidVietnamPhone } from '../utils/phone';
 
 const orderRepo = new OrderRepository();
 const shopRepo = new ShopRepository();
@@ -233,6 +234,7 @@ export class OrderService {
     if (!id_store || !receiver_name || !receiver_phone || !receiver_address || !id_dest_area || !weight) {
       throw new Error('Thieu thong tin bat buoc: id_store, receiver_name, receiver_phone, receiver_address, id_dest_area, weight.');
     }
+    const normalizedReceiverPhone = assertValidVietnamPhone(receiver_phone, 'SĐT người nhận');
 
     const shop = await shopRepo.findShopByUserId(idUser);
     if (!shop) throw new Error('Khong tim thay thong tin shop.');
@@ -306,7 +308,7 @@ export class OrderService {
           id_store,
           id_service_type: id_service_type || null,
           receiver_name,
-          receiver_phone,
+          receiver_phone: normalizedReceiverPhone,
           receiver_address,
           id_dest_area,
           weight: billableWeight,
@@ -404,7 +406,7 @@ export class OrderService {
         status: 'CHỜ LẤY HÀNG',
         pickup_store: store.store_name,
         pickup_address: store.address,
-        receiver: { name: receiver_name, phone: receiver_phone, address: receiver_address },
+        receiver: { name: receiver_name, phone: normalizedReceiverPhone, address: receiver_address },
         fee_summary: {
           payer_type: normalizedPayerType,
           fee_payment_method: normalizedFeePaymentMethod,

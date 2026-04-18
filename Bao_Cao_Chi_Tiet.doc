@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Báo Cáo Đồ Án Quản Lý Kho Vận</title>
+    <style>
+        body { font-family: "Times New Roman", Times, serif; font-size: 14pt; line-height: 1.5; margin: 2cm; }
+        h1, h2, h3, h4 { color: #000000; }
+        h1 { font-size: 24pt; text-align: center; text-transform: uppercase; margin-bottom: 24px; }
+        h2 { font-size: 18pt; margin-top: 30px; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        h3 { font-size: 16pt; margin-top: 20px; }
+        p { text-align: justify; margin-bottom: 14px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        .center { text-align: center; }
+        .cover-page { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; page-break-after: always; }
+        .cover-title { font-size: 32pt; font-weight: bold; text-align: center; }
+        ins { text-decoration: none; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <!-- Bìa báo cáo giả định -->
+    <div style="text-align: center; margin-top: 100px; margin-bottom: 200px; page-break-after: always;">
+        <h2 style="border: none;">BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH</h2>
+        <h1 style="font-size: 36pt; margin-top: 50px;">HỆ THỐNG QUẢN LÝ KHO VẬN (LOGISTICS) VÀ CHUỖI CUNG ỨNG E-COMMERCE</h1>
+        <h3 style="margin-top: 100px;">Đồ án phân tích, thiết kế và xây dựng phần mềm</h3>
+        <p style="margin-top: 20px; text-align: center;">Tháng 04 - 2026</p>
+    </div>
+
+    <!-- MỞ ĐẦU -->
+    <h2>CHƯƠNG 1: MỞ ĐẦU VÀ TỔNG QUAN DỰ ÁN</h2>
+    
+    <h3>1.1 Đặt vấn đề nghiên cứu</h3>
+    <p>Trong thời đại số hóa mạnh mẽ hiện nay, ngành Thương mại điện tử (E-commerce) không thể tách rời khỏi một nền tảng Logistics vững mạnh. Quá trình luân chuyển hàng hóa từ nhà bán hàng (Seller/Shop) đến tận tay người tiêu dùng cuối không chỉ đòi hỏi sự nhanh chóng, an toàn mà còn phải tối ưu hóa về mặt chi phí và tuyến đường (Route Optimization).</p>
+    <p>Các hệ thống quản lý giao nhận truyền thống thường gặp nhiều vấn đề như: không minh bạch về thời gian thực, quản lý dòng tiền thu hộ (COD - Cash On Delivery) yếu kém dẫn đến thất thoát, sự rời rạc giữa bộ phận kho (Stockkeeper) và đội ngũ vận chuyển (Shipper), cũng như thiếu một công cụ phân tích dữ liệu trực quan cho ban lãnh đạo.</p>
+    <p>Hiểu được nhu cầu định hình lại chuỗi cung ứng, đồ án này được đề xuất và thực hiện nhằm xây dựng một Hệ thống Quản Lý Kho Vận toàn diện (TMDT Logistics) với mục tiêu số hóa 100% quy trình vận hành của một công ty chuyển phát nhanh mô phỏng, cung cấp đầy đủ công cụ cho 4 đối tượng người dùng chính: Shop, Shipper, Stockkeeper và Admin.</p>
+
+    <h3>1.2 Mục tiêu dự án</h3>
+    <p>Dự án hướng đến các mục tiêu kỹ thuật và nghiệp vụ then chốt sau:</p>
+    <ul>
+        <li><strong>Về mặt nghiệp vụ:</strong> Tự động hóa quy trình lên đơn, tính cước vận chuyển linh động dựa trên mô hình mạng lưới Hub-Spoke, quản lý đối soát ví thương mại tự động để minh bạch hoá dòng tiền.</li>
+        <li><strong>Về mặt kỹ thuật:</strong> Xây dựng một kiến trúc Mono-repo đa nền tảng, đảm bảo Backend chịu tải cao, giao diện Web trực quan (Responsive) và ứng dụng Web-Mobile thân thiện, tối ưu khả năng quét mã vạch Barcode siêu tốc.</li>
+    </ul>
+
+    <h3>1.3 Phạm vi hệ thống</h3>
+    <p>Phạm vi dự án trải dài trên toàn bộ vòng đời của một vận đơn, bao gồm:</p>
+    <ol>
+        <li><strong>Nhà bán hàng (Shop):</strong> Đăng ký tài khoản, nạp/rút tiền điện tử, lên đơn, chọn dịch vụ chuyển phát và tra cứu hành trình trực tiếp.</li>
+        <li><strong>Đội ngũ lấy / giao hàng (Shipper):</strong> Sử dụng App Mobile để nhận danh sách công việc trong ca, quét mã QR mã vận đơn, nhận diện trạng thái và tổng kết COD báo cáo nộp tiền cuối ngày.</li>
+        <li><strong>Đội ngũ Kho bãi (Stockkeeper):</strong> Nhập kho (Inbound), xuất kho (Outbound), điều chuyển hàng hóa liên tỉnh giữa các Hub lớn và Spoke nhỏ.</li>
+        <li><strong>Quản trị viên (Admin):</strong> Giám sát bản đồ 3D mạng lưới, thống kê doanh thu đa chiều, thao tác quản trị nhân sự và kiểm duyệt đối soát.</li>
+    </ol>
+
+    <!-- CHƯƠNG 2: KIẾN TRÚC -->
+    <h2>CHƯƠNG 2: KIẾN TRÚC HỆ THỐNG VÀ CÔNG NGHỆ</h2>
+
+    <h3>2.1 Kiến trúc tổng thể Monorepo</h3>
+    <p>Hệ thống được ứng dụng mô hình Monorepo (tích hợp trên một repository duy nhất nhưng vận hành đồng thời 4 micro-services/applications độc lập). Khác biệt lớn nhất của kiến trúc này là sự dễ dàng trong quá trình triển khai CI/CD và định tuyến.</p>
+    <p><b>Các phân hệ chính:</b></p>
+    <ul>
+        <li><strong>Webservice (Core API):</strong> Node.js, Express 5. Cung cấp Data endpoints cho toàn bộ Client. Phân cụm Controller - Service - Repository để đảm bảo nguyên lý SOLID.</li>
+        <li><strong>Client App:</strong> Dành cho Shop quản lý công việc của họ (React 19, TypeScript, Vite).</li>
+        <li><strong>Admin App:</strong> Dành cho người vận hành cấp cao (React, Recharts, `react-force-graph-3d` để render hạ tầng giao nhận).</li>
+        <li><strong>Mobile Workspace:</strong> Dành cho lực lượng dã chiến. Hoạt động trên trình duyệt điện thoại/máy quét chuyên dụng (Mobile Web) kết hợp thư viện `html5-qrcode`.</li>
+    </ul>
+
+    <h3>2.2 Đặc tả Backend và Trạm lưu trữ dữ liệu (PostgreSQL)</h3>
+    <p>Cơ sở dữ liệu PostgreSQL được lựa chọn thay thế cho NoSQL truyền thống vì hệ thống chứa nhiều ràng buộc (Constraints), giao dịch tài chính (Transactions) cần ACID compliance tuyệt đối (Atomicity, Consistency, Isolation, Durability).</p>
+    <p>Driver <code>pg</code> được tích hợp cùng hệ quản trị connection pooling để phục vụ hàng ngàn truy vấn đồng thời. Cấu trúc DB chia thành các vùng: Auth Region, Topology Region (Hub-Spoke), Pricing Region, Order Region và Wallet Region.</p>
+
+    <h3>2.3 Giao thức bảo mật & Thanh toán</h3>
+    <p>Toàn bộ APIs yêu cầu gửi kèm JWT Token hợp lệ dưới dạng Bearer Token tại Headers. Hệ thống middleware sẽ parse token và bóc tách `id_user`, `role` trước khi cho qua. Đối với mật khẩu, chúng được hash bằng kĩ thuật genSalt từ `bcrypt` chống lại Rainbow Table attacks.</p>
+    <p>Hệ thống tích hợp cổng thanh toán trực tiếp **PayOS**. Mỗi tài khoản Shop được map với một mã số ví. Khi yêu cầu nạp tiền, Backend sẽ tạo một Request lên PayOS lấy link QR_Code hiển thị cho Shop. Sau khi Bank chuyển khoản thành công, PayOS gửi Webhook ngược về Backend để cộng tiền một cách hoàn toàn tự động lập tức (Real-time Webhook sync).</p>
+
+    <!-- CHƯƠNG 3: CHI TIẾT ... -->
+    <h2>CHƯƠNG 3: PHÂN TÍCH CHỨC NĂNG VÀ LUỒNG NGHIỆP VỤ</h2>
+
+    <h3>3.1 Cấu trúc Hạ tầng Mạng lưới (Hub & Spoke Topology)</h3>
+    <p>Logistics hiện đại không đi trực tiếp từ Điểm A tới Điểm B. Hàng hóa được gom về các Bưu cục nhỏ (Spoke), sau đó trung chuyển về Tổng Kho (Hub) để phân loại đi các Hub khu vực khác, trước khi rẽ nhánh về Spoke đích.</p>
+    <p>Trong hệ thống, bảng `areas` (Tỉnh Thành) được nối kết chặt chẽ với bảng `spokes` và cao hơn là `hubs`. Khi Shop tạo đơn hàng có mã khu vực (ID_Dest_Area), Backend Engine sẽ nội suy ra Phân Loại Tuyến (Route_Type): Nội Thành, Ngoại Thành, hay Liên Tỉnh (Dựa theo Hub_ID của Spoke gốc và Spoke đích). Từ đó, tự động dò tìm cấu hình giá (Pricing_Rules) cho khớp trọng lượng gói hàng.</p>
+
+    <h3>3.2 Vòng đời Đơn hàng (Order Lifecycle)</h3>
+    <p>Quá trình vận chuyển một đơn hàng trải qua quy trình strict-state (hữu hạn trạng thái):</p>
+    <ul>
+        <li><strong>CHỜ LẤY HÀNG:</strong> Đơn khởi tạo bởi Shop thành công, tiền phí vận chuyển được Holding, gián đoạn tại kho Shop chờ xe tới.</li>
+        <li><strong>ĐANG LẤY:</strong> Shipper nhận task đi lấy, quét mã xác nhận.</li>
+        <li><strong>NHẬP KHO GỬI (INBOUND SOURCE):</strong> Thủ kho quét chốt hàng đã lên xe trung chuyển.</li>
+        <li><strong>ĐANG LUÂN CHUYỂN:</strong> Hàng điều tải giữa các trạm qua đêm.</li>
+        <li><strong>NHẬP KHO GIAO (INBOUND DEST):</strong> Hàng về tới kho phát cuối, nằm chờ phân list cho Shipper bưu tá.</li>
+        <li><strong>ĐANG GIAO:</strong> Shipper cầm hàng vi vu trên đường, trạng thái được cập nhật qua GPS hoặc App.</li>
+        <li><strong>GIAO THÀNH CÔNG:</strong> Thu đủ tiền COD (nếu có), đẩy trạng thái End-state. Tiền COD cộng vào ví ảo đối soát. Hệ thống insert log lịch sử đóng băng giao dịch.</li>
+    </ul>
+
+    <h3>3.3 Chức năng Tracking và Lịch sử hành trình (Order_Logs)</h3>
+    <p>Bảng thiết thực nhất đối với khách hàng mua lẻ là `order_logs`. Mọi cú click thay đổi trạng thái của Shipper hay Stockkeeper đều trigger một hàm `insertOrderLog()`. Hàm này ghi lại: Trạng thái mới, Địa điểm scan (thuộc Bưu cục hay Kho cụ thể nào), Nhân sự nào thực hiện (ID thao tác), và Hình ảnh bằng chứng giao nhận hợp lệ (`evidence_url`).</p>
+    <p>Việc này đảm bảo kiểm toán cực kỳ minh bạch và làm bằng chứng xử lý khiếu nại nếu hàng hoá bị thất lạc.</p>
+
+    <!-- CHƯƠNG 4 -->
+    <h2>CHƯƠNG 4: GIẢI PHÁP DATABASE CHI TIẾT (ETD)</h2>
+    <p>Cấu trúc Database trung tâm phản chiếu sự phức hệ của Đồ án. Xin trình bày các lược đồ bảng chính yếu:</p>
+    <table>
+        <tr>
+            <th style="width: 20%;">Bảng (Table)</th>
+            <th>Cấu trúc nổi bật & Công năng</th>
+        </tr>
+        <tr>
+            <td><code>users</code> & <code>roles</code></td>
+            <td>Quản trị authentication, map ID vs enum roles tránh truy xuất sai lầm.</td>
+        </tr>
+        <tr>
+            <td><code>orders</code></td>
+            <td>tracking_code (Unique), id_store, weight, id_dest_area, cod_amount, shipping_fee. Dữ liệu thay đổi cao.</td>
+        </tr>
+        <tr>
+            <td><code>order_logs</code></td>
+            <td>id_order, id_actor, id_location, action (VARCHAR), created_at. Dữ liệu chỉ insert vĩnh viễn (Read/Write heavy).</td>
+        </tr>
+        <tr>
+            <td><code>wallets</code></td>
+            <td>id_account, balance. Cơ chế khoá bảng bằng SELECT ... FOR UPDATE nhằm ngăn chặn nhiều request trừ tiền cùng một milli-second.</td>
+        </tr>
+        <tr>
+            <td><code>transaction_history</code></td>
+            <td>Thống kê biến động để render báo cáo Excel hoặc biểu đồ đường tài chính tại Client Dashboard.</td>
+        </tr>
+    </table>
+
+    <!-- CHƯƠNG 5 -->
+    <h2>CHƯƠNG 5: KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN</h2>
+    <p>Đồ án đánh dấu sự hoàn thiện trong việc số hóa luồng vận hành phức tạp nhưng mang tính thực tiễn vô cùng cao của mô hình Giao Hàng Thương Mại Điện Tử. Hệ thống đã đáp ứng được:</p>
+    <ul>
+        <li>Tối đa hóa hiệu năng truy vấn cho hành trình (Tracking).</li>
+        <li>Đảm bảo không thất thoát dòng tiền COD.</li>
+        <li>UX/UI đồng nhất từ máy tính bàn cho tới điện thoại dã chiến.</li>
+    </ul>
+    <h3>Hướng mở rộng</h3>
+    <p>Trọng tâm tương lai có thể ứng dụng <b>Machine Learning</b> vào việc phân nhánh và chia chặng, tối ưu bài toán VRP (Vehicle Routing Problem) nhằm cắt quãng đường Shipper giao hàng thấp nhất. Ngoài ra, việc bọc lại luồng Frontend Mobile Web bằng React Native nguyên bản cũng hứa hẹn một App Android/iOS offline mượt mà hơn trong điều kiện kết nối 4G kém.</p>
+
+</body>
+</html>

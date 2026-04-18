@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { FiTruck, FiArrowLeft } from 'react-icons/fi';
 import apiClient from '../../api/client';
+import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../../utils/phone';
 import './Auth.css';
 
 const Register = () => {
@@ -72,11 +73,17 @@ const Register = () => {
       return;
     }
 
+    const normalizedPhone = normalizeVietnamPhone(formData.phone);
+    if (!isValidVietnamPhone(normalizedPhone)) {
+      setError(vietnamPhoneError);
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
-      const res = await apiClient.post('/shop/register', formData) as any;
+      const res = await apiClient.post('/shop/register', { ...formData, phone: normalizedPhone }) as any;
       if (res && res.status === 'success') {
         setSuccess(true);
         setTimeout(() => { navigate('/login'); }, 2000);

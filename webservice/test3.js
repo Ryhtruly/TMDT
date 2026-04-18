@@ -1,0 +1,4 @@
+const { PayOS } = require('@payos/node');
+const p = new PayOS({ clientId: '396af840-e242-4944-bc5f-c96730869ea7', apiKey: 'a2f64ca5-cccc-4a9f-83e1-1b1ebc2cb791', checksumKey: '760899c2fbc88ea77508b84b89cdbac2ba3cdb27422001246dd5d8fc7aed7026' });
+const wh = {"code":"00","desc":"success","success":true,"data":{"accountNumber":"0843469437","amount":10000,"description":"CSCJPTJJ9P3 Nap tien VI TMDT","reference":"FT26106FYSP5","transactionDateTime":"2026-04-16 17:09:00","virtualAccountNumber":"CAS0843469437","counterAccountBankId":"","counterAccountBankName":"","counterAccountName":null,"counterAccountNumber":null,"virtualAccountName":"","currency":"VND","orderCode":63144476,"paymentLinkId":"3c5aaa46d2d941cd8630b1a27d478d17","code":"00","desc":"success"},"signature":"de1a147e0208922d0653f6bd3d299d9a4cbe5c20cac8295dc58e0ea1af0e1572"};
+p.webhooks.verify(wh).then(res => console.log('RES:', res)).catch(e => console.log('ERR:', e.message));
