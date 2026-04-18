@@ -2,10 +2,14 @@ import { Router } from 'express';
 import { verifyToken, checkRoles } from '../middlewares/auth.middleware';
 import {
   registerShop,
+  sendOtp,
+  sendOtpForgot,
+  verifyOtp,
+  resetPassword,
   getProfile,
   getStores, addStore, updateStore, deleteStore,
   getBanks, addBank, deleteBank,
-  getWallet, topupWallet, withdrawWallet,
+  getWallet, topupWallet, withdrawWallet, payosWebhook,
   cancelOrder,
   getCashflowReport,
   getSpokes,
@@ -22,6 +26,11 @@ const router = Router();
 // PUBLIC: Đăng ký tài khoản Shop (không cần token)
 // =====================================================
 router.post('/register', registerShop);
+router.post('/send-otp', sendOtp);
+router.post('/send-otp-forgot', sendOtpForgot);
+router.post('/verify-otp', verifyOtp);
+router.post('/reset-password', resetPassword);
+router.post('/webhook/payos', payosWebhook);
 
 // =====================================================
 // PRIVATE: Tất cả endpoint bên dưới cần TOKEN của SHOP
@@ -65,6 +74,9 @@ router.post('/orders', createOrder);
 
 // Xem danh sách đơn (có thể lọc: ?status=CHờ+LẤY+HÀNG)
 router.get('/orders', getMyOrders);
+
+// Tra cứu chi tiết đơn theo tracking code
+router.get('/orders/:tracking_code/track', trackOrder);
 
 // Báo cáo dòng tiền
 router.get('/cashflow', getCashflowReport);

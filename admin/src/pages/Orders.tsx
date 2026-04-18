@@ -35,9 +35,9 @@ const Orders = () => {
         limit: String(pageSize),
         ...(statusFilter && { status: statusFilter })
       });
-      const res = await apiClient.get(`/admin/orders?${params}`);
-      setOrders(res.data?.rows || []);
-      setTotal(res.data?.total || 0);
+      const res = await apiClient.get(`/admin/orders?${params}`) as any;
+      setOrders(res.rows || []);
+      setTotal(res.total || 0);
     } catch (err) {
       console.error(err);
     } finally {

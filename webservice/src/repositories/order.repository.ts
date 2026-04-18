@@ -82,7 +82,13 @@ export class OrderRepository {
 
   // Trừ tiền ví + ghi lịch sử
   async deductWalletAndLog(id_wallet: number, amount: number, note: string, client: any) {
-    await client.query('UPDATE wallets SET balance = balance - $1 WHERE id_wallet = $2', [amount, id_wallet]);
+    await client.query(`
+      UPDATE wallets 
+      SET 
+        used_credit = used_credit + CASE WHEN balance < $1 THEN $1 - balance ELSE 0 END,
+        balance = CASE WHEN balance < $1 THEN 0 ELSE balance - $1 END
+      WHERE id_wallet = $2
+    `, [amount, id_wallet]);
     await client.query(
       'INSERT INTO transaction_history (id_wallet, amount, type) VALUES ($1, $2, $3)',
       [id_wallet, -amount, note]

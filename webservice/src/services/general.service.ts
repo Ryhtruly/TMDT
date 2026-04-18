@@ -159,6 +159,52 @@ export class GeneralService {
     }
   }
 
+  async rejectCodPayout(id_payout: number, id_admin: number, admin_note?: string) {
+    const client = await repo.getTxClient();
+    try {
+      await client.query('BEGIN');
+      const payout = await repo.findPayoutForUpdate(id_payout, client);
+      if (!payout) throw new Error('Khong tim thay phien payout COD.');
+      if (!['CHO_DUYET'].includes(String(payout.status))) {
+        throw new Error(`Chi co the tu choi phien dang o trang thai CHO_DUYET. Hien tai: ${payout.status}.`);
+      }
+      const rejected = await repo.rejectCodPayout(id_payout, id_admin, admin_note || null, client);
+      await repo.writeAuditLog(id_admin, 'REJECT_COD_PAYOUT', 'cod_payouts', {
+        id_payout, reason: admin_note
+      });
+      await client.query('COMMIT');
+      return { message: 'Da tu choi phien payout COD. Shop co the gui lai yeu cau moi.', data: rejected };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async rejectShipperCodReconciliation(id_reconciliation: number, id_admin: number, admin_note?: string) {
+    const client = await repo.getTxClient();
+    try {
+      await client.query('BEGIN');
+      const reconciliation = await repo.findShipperCodReconciliationForUpdate(id_reconciliation, client);
+      if (!reconciliation) throw new Error('Khong tim thay phieu nop tien COD cua shipper.');
+      if (String(reconciliation.status) !== 'CHO_XAC_NHAN') {
+        throw new Error(`Chi co the tu choi phieu dang o trang thai CHO_XAC_NHAN. Hien tai: ${reconciliation.status}.`);
+      }
+      const rejected = await repo.rejectShipperCodReconciliation(id_reconciliation, id_admin, admin_note || null, client);
+      await repo.writeAuditLog(id_admin, 'REJECT_SHIPPER_COD_CASH', 'shipper_cod_reconciliations', {
+        id_reconciliation, id_shipper: reconciliation.id_shipper, reason: admin_note
+      });
+      await client.query('COMMIT');
+      return { message: 'Da tu choi phieu nop tien. Shipper co the nop lai phieu moi.', data: rejected };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   // === PROMOTIONS ===
   async getActivePromos() { return await repo.getActivePromotions(); }
   async getAllPromos() { return await repo.getAllPromotions(); }

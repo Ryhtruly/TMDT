@@ -84,6 +84,11 @@ const Login = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            <div style={{ textAlign: 'right', marginTop: '8px' }}>
+              <Link to="/forgot-password" style={{ color: '#4f46e5', fontSize: '0.9rem', textDecoration: 'none' }}>
+                Quên mật khẩu?
+              </Link>
+            </div>
           </div>
           <button type="submit" className="btn-primary btn-full" disabled={loading}>
             {loading ? 'Đang xử lý...' : 'Đăng Nhập Ngay'}

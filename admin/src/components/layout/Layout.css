@@ -16,6 +16,23 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Custom Scrollbar cho Sidebar */
+.sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: var(--slate-300);
+  border-radius: 4px;
+}
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: var(--slate-400);
 }
 
 .nav-item {

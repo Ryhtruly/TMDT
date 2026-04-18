@@ -429,5 +429,48 @@ export class GeneralRepository {
     return parseInt(result.rows[0].cnt) > 0;
   }
 
+
+  // === REJECT COD PAYOUT (Admin từ chối — shop cần gửi lại yêu cầu mới) ===
+  async rejectCodPayout(id_payout: number, id_admin: number, admin_note: string | null, client: any) {
+    const result = await client.query(`
+      UPDATE cod_payouts
+      SET status = 'HUY',
+          approved_at = NOW(),
+          approved_by = $2,
+          admin_note = $3
+      WHERE id_payout = $1
+      RETURNING *
+    `, [id_payout, id_admin, admin_note]);
+    return result.rows[0] || null;
+  }
+
+  // === REJECT SHIPPER COD RECONCILIATION (Admin từ chối — orders & cash_collections free lại) ===
+  async rejectShipperCodReconciliation(
+    id_reconciliation: number,
+    id_admin: number,
+    admin_note: string | null,
+    client: any
+  ) {
+    // 1. Đặt phiếu về trạng thái TU_CHOI
+    const result = await client.query(`
+      UPDATE shipper_cod_reconciliations
+      SET status = 'TU_CHOI',
+          confirmed_at = NOW(),
+          confirmed_by = $2,
+          admin_note = $3
+      WHERE id_reconciliation = $1
+      RETURNING *
+    `, [id_reconciliation, id_admin, admin_note]);
+
+    // 2. Giải phóng các cash_collections để shipper có thể tạo phiếu mới nếu cần
+    await client.query(`
+      UPDATE order_cash_collections
+      SET reconciliation_id = NULL
+      WHERE reconciliation_id = $1
+    `, [id_reconciliation]);
+
+    return result.rows[0] || null;
+  }
+
   async getTxClient() { return await pool.connect(); }
 }
