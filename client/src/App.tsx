@@ -14,6 +14,7 @@ import Orders from './pages/shop/Orders';
 import OrderDetail from './pages/shop/OrderDetail';
 import CreateOrder from './pages/shop/CreateOrder';
 import Support from './pages/shop/Support';
+import Profile from './pages/shop/Profile';
 
 function App() {
   return (
@@ -40,6 +41,7 @@ function App() {
           <Route path="/orders/create" element={<CreateOrder />} />
           <Route path="/orders/:id" element={<OrderDetail />} />
           <Route path="/support" element={<Support />} />
+          <Route path="/profile" element={<Profile />} />
         </Route>
       </Route>
     </Routes>

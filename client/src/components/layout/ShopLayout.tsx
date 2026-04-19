@@ -111,14 +111,6 @@ const ShopLayout = () => {
           </div>
         </div>
 
-        <div className="verify-card">
-          <FiShield size={32} color="var(--primary-color)" style={{ marginBottom: '8px' }} />
-          <p>Xac thuc tai khoan de mo them quyen loi van hanh cho shop.</p>
-          <button className="btn-primary" style={{ width: '100%', padding: '8px', fontSize: '12px' }}>
-            Xac thuc ngay
-          </button>
-        </div>
-
         <nav className="sidebar-nav">
           <NavLink to="/dashboard" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
             Bao cao - Live
@@ -134,6 +126,9 @@ const ShopLayout = () => {
           </NavLink>
           <NavLink to="/support" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
             Ho tro - Khieu nai
+          </NavLink>
+          <NavLink to="/profile" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+            Cau hinh tai khoan
           </NavLink>
         </nav>
       </aside>

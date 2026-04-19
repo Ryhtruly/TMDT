@@ -76,14 +76,19 @@ const Routes = () => {
 
   const handleToggle = async (route: RouteNode, e: React.MouseEvent) => {
     e.stopPropagation();
+    const isActive = route.is_active !== false;
     const confirm = window.confirm(
-      `${route.is_active ? 'Vô hiệu hóa' : 'Kích hoạt'} tuyến RT-${route.id_route}?\n` +
+      `${isActive ? 'Vô hiệu hóa' : 'Kích hoạt'} tuyến RT-${route.id_route}?\n` +
       `${route.origin_name} → ${route.dest_name}`
     );
     if (!confirm) return;
     try {
-      await apiClient.put(`/admin/routes/${route.id_route}/toggle`);
-      fetchRoutes();
+      const res: any = await apiClient.put(`/admin/routes/${route.id_route}/toggle`);
+      // Cập nhật local state ngay lập tức
+      const newActive = res?.is_active ?? !isActive;
+      setRoutes(prev => prev.map(r =>
+        r.id_route === route.id_route ? { ...r, is_active: newActive } : r
+      ));
     } catch (err: any) {
       alert('Lỗi: ' + (err.response?.data?.message || err.message));
     }
