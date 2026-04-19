@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { FiHome, FiMap, FiUsers, FiSettings, FiGift, FiMessageSquare, FiActivity, FiBox, FiDollarSign, FiShoppingBag, FiPackage, FiNavigation, FiRefreshCcw } from 'react-icons/fi';
+import { FiHome, FiMap, FiUsers, FiSettings, FiGift, FiMessageSquare, FiActivity, FiDollarSign, FiShoppingBag, FiPackage, FiNavigation, FiRefreshCcw } from 'react-icons/fi';
 import apiClient from '../../api/client';
 import './Layout.css';
 
@@ -60,7 +60,6 @@ const Sidebar = () => {
       label: 'Vận hành',
       items: [
         { name: 'Đơn Hàng', path: '/orders', icon: <FiPackage /> },
-        { name: 'Bao Kiện', path: '/bags', icon: <FiBox /> },
         { name: 'Tuyến Đường', path: '/routes', icon: <FiNavigation /> },
         { name: 'Hoàn Hàng', path: '/returns', icon: <FiRefreshCcw /> },
       ]

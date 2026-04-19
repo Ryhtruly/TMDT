@@ -146,4 +146,99 @@ export class StockkeeperRepository {
   async getTxClient() {
     return await pool.connect();
   }
+
+  // BAGS - Smart Next-Hop Grouping
+  // Xác định "next hop" của mỗi đơn dựa trên area→spoke→hub mapping
+  // Nếu đơn đang ở Hub A và dest_hub khác Hub A → cần gom bao về Hub dest
+  // Nếu đơn đang ở Hub mà dest_hub = Hub này → gom bao về Spoke đích (local delivery)
+  async getOrdersForBagging(id_hub: number | null, id_spoke: number | null) {
+    const result = await pool.query(`
+      WITH order_dest AS (
+        SELECT 
+          wi.id_order,
+          wi.last_updated,
+          wi.id_hub as current_hub_id,
+          wi.id_spoke as current_spoke_id,
+          o.tracking_code,
+          o.receiver_name,
+          o.receiver_address,
+          a.province,
+          a.district,
+          a.id_spoke as dest_spoke_id,
+          dest_sp.spoke_name as dest_spoke_name,
+          dest_sp.id_hub as dest_hub_id,
+          dest_h.hub_name as dest_hub_name
+        FROM warehouse_inventory wi
+        JOIN orders o ON wi.id_order = o.id_order
+        LEFT JOIN areas a ON o.id_dest_area = a.id_area
+        LEFT JOIN spokes dest_sp ON a.id_spoke = dest_sp.id_spoke
+        LEFT JOIN hubs dest_h ON dest_sp.id_hub = dest_h.id_hub
+        WHERE ($1::int IS NULL OR wi.id_hub = $1)
+          AND ($2::int IS NULL OR wi.id_spoke = $2)
+          AND wi.id_order NOT IN (
+            SELECT bi.id_order
+            FROM bag_items bi
+            JOIN bags b ON bi.id_bag = b.id_bag
+            WHERE b.status IN ('CREATED', 'SEALED', 'IN_TRANSIT')
+          )
+      )
+      SELECT *,
+        -- Nếu dest_hub khác hub hiện tại → next_hop là Hub đích (inter-hub transit)
+        -- Nếu cùng hub → next_hop là Spoke đích (local last-mile)
+        CASE
+          WHEN current_hub_id IS NOT NULL AND dest_hub_id IS NOT NULL AND dest_hub_id != current_hub_id
+            THEN 'HUB'
+          WHEN dest_spoke_id IS NOT NULL
+            THEN 'SPOKE'
+          ELSE 'UNKNOWN'
+        END as next_hop_type,
+        CASE
+          WHEN current_hub_id IS NOT NULL AND dest_hub_id IS NOT NULL AND dest_hub_id != current_hub_id
+            THEN dest_hub_id
+          WHEN dest_spoke_id IS NOT NULL
+            THEN dest_spoke_id
+          ELSE NULL
+        END as next_hop_id,
+        CASE
+          WHEN current_hub_id IS NOT NULL AND dest_hub_id IS NOT NULL AND dest_hub_id != current_hub_id
+            THEN dest_hub_name
+          WHEN dest_spoke_name IS NOT NULL
+            THEN dest_spoke_name
+          ELSE 'Điểm đến không xác định'
+        END as next_hop_name
+      FROM order_dest
+      ORDER BY next_hop_name, tracking_code
+    `, [id_hub, id_spoke]);
+    return result.rows;
+  }
+
+  async createBag(
+    origin_hub_id: number | null,
+    dest_hub_id: number | null,
+    order_ids: number[],
+    client: any,
+    dest_spoke_id?: number | null
+  ) {
+    const bag_code = 'B-' + Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+    const result = await client.query(
+      `INSERT INTO bags (bag_code, origin_hub_id, dest_hub_id, dest_spoke_id, status)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id_bag, bag_code`,
+      [bag_code, origin_hub_id || null, dest_hub_id || null, dest_spoke_id || null, 'CREATED']
+    );
+    const id_bag = result.rows[0].id_bag;
+
+    for (let id_order of order_ids) {
+      await client.query('INSERT INTO bag_items (id_bag, id_order) VALUES ($1, $2)', [id_bag, id_order]);
+    }
+    return bag_code;
+  }
+
+  async updateBagStatus(bag_code: string, new_status: string) {
+    const result = await pool.query(
+      'UPDATE bags SET status = $1 WHERE bag_code = $2 RETURNING id_bag',
+      [new_status, bag_code]
+    );
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
 }

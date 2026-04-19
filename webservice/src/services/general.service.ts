@@ -246,6 +246,7 @@ export class GeneralService {
     return await repo.createFeedback(id_user, title, content);
   }
   async getFeedbacks() { return await repo.getAllFeedbacks(); }
+  async getMyFeedbacks(id_user: number) { return await repo.getFeedbacksByUser(id_user); }
   async updateFeedbackStatus(id_feedback: number, status: string) {
     await repo.updateFeedbackStatus(id_feedback, status);
   }

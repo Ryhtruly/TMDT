@@ -22,4 +22,10 @@ router.post('/scan/inbound', scanInbound);
 // TẠI KHO → ĐANG TRUNG CHUYỂN
 router.post('/scan/outbound', scanOutbound);
 
+// Gom bao kiện
+import { getBagSuggestions, createBag, getHubs } from '../controllers/stockkeeper.controller';
+router.get('/hubs', getHubs);
+router.get('/bags/suggestions', getBagSuggestions);
+router.post('/bags', createBag);
+
 export default router;

@@ -8,7 +8,7 @@ import {
   getPromos, getAllPromos, createPromo, togglePromo, applyPromo,
   reportIncident, resolveIncident, getIncidents,
   getNotifications, markNotificationRead, markAllNotificationsRead,
-  submitFeedback, getFeedbacks, updateFeedbackStatus,
+  submitFeedback, getFeedbacks, getMyFeedbacks, updateFeedbackStatus,
   getShipperCodSummary,
   requestReturn,
   calcShipperIncome, getShipperIncomeHistory, setShipperSalary,
@@ -60,6 +60,7 @@ router.put('/notifications/read-all', verifyToken, markAllNotificationsRead);
 
 // Feedbacks
 router.post('/feedbacks', verifyToken, submitFeedback);
+router.get('/feedbacks/me', verifyToken, getMyFeedbacks);
 router.get('/feedbacks', verifyToken, checkRoles(['ADMIN']), getFeedbacks);
 router.put('/feedbacks/:id', verifyToken, checkRoles(['ADMIN']), updateFeedbackStatus);
 

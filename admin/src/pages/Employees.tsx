@@ -297,7 +297,7 @@ const Employees = () => {
         id_hub: formData.id_hub ? parseInt(formData.id_hub, 10) : undefined,
         id_spoke: formData.id_spoke ? parseInt(formData.id_spoke, 10) : undefined,
       });
-      setMessage({ type: 'success', text: 'Them nhan su thanh cong.' });
+      setMessage({ type: 'success', text: 'Thêm nhân sự thành công.' });
       setFormData({
         phone: '',
         password: '',
@@ -367,7 +367,7 @@ const Employees = () => {
         id_user: parseInt(roleForm.id_user, 10),
         id_role: parseInt(roleForm.id_role, 10),
       });
-      alert('Da cap quyen thanh cong.');
+      alert('Đã cấp quyền thành công.');
       setIsDrawerOpen(false);
       fetchEmployees();
     } catch (err: any) {
@@ -381,7 +381,7 @@ const Employees = () => {
       await apiClient.delete('/admin/user-roles', {
         data: { id_user: parseInt(roleForm.id_user, 10), id_role: parseInt(roleForm.id_role, 10) },
       });
-      alert('Da thu hoi quyen thanh cong.');
+      alert('Đã thu hồi quyền thành công.');
       setIsDrawerOpen(false);
       fetchEmployees();
     } catch (err: any) {
@@ -534,7 +534,7 @@ const Employees = () => {
                         </td>
                       </tr>
                     ))}
-                    {filtered.length === 0 && <tr><td colSpan={7} className="empty-state">Khong tim thay nhan vien nao.</td></tr>}
+                    {filtered.length === 0 && <tr><td colSpan={7} className="empty-state">Không tìm thấy nhân viên nào.</td></tr>}
                   </tbody>
                 </table>
               )}
@@ -697,7 +697,7 @@ const Employees = () => {
                   </select>
                   {zoneForm.id_spoke && visibleShipperOptions.length === 0 && (
                     <div style={{ color: '#b45309', fontSize: '0.8rem', marginTop: '6px' }}>
-                      Khong tim thay shipper nao dang duoc gan vao spoke nay.
+                      Không tìm thấy shipper nào đang được phân công vào chi nhánh tiếp nhận này.
                     </div>
                   )}
                 </div>

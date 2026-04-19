@@ -230,7 +230,7 @@ const CreateOrder = () => {
       const chargedNow = Number(fee.sender_charged_now || 0);
       const senderCash = Number(fee.sender_cash_fee_on_pickup || 0);
       const deliveryCash = Number(fee.cash_to_collect_on_delivery || 0);
-      let message = 'Tao don thanh cong.';
+      let message = 'Tạo đơn thành công.';
       if (formData.payer_type === 'RECEIVER') {
         message += `\nShipper se thu ${deliveryCash.toLocaleString('vi-VN')} d tu nguoi nhan khi giao.`;
       } else if (formData.fee_payment_method === 'CASH') {
@@ -363,7 +363,7 @@ const CreateOrder = () => {
           </div>
 
           <div className="ghn-card">
-            <div className="ghn-card-title">Thong tin don hang</div>
+            <div className="ghn-card-title">Thông tin đơn hàng</div>
             <div className="form-grid-2">
               <div className="ghn-form-group"><label>Tong tien thu ho (COD)</label><input type="number" className="ghn-input" value={formData.cod_amount} onChange={(e) => setFormData((p) => ({ ...p, cod_amount: Number(e.target.value) }))} /></div>
               <div className="ghn-form-group"><label>Tong gia tri hang hoa</label><input type="number" className="ghn-input" value={formData.item_value} onChange={(e) => setFormData((p) => ({ ...p, item_value: Number(e.target.value) }))} /></div>
@@ -466,7 +466,7 @@ const CreateOrder = () => {
 
           <div className="bill-actions">
             <button type="button" className="btn-draft">LUU NHAP</button>
-            <button type="submit" disabled={loadingSubmit || loadingPreview || !previewFee} className="btn-create">{loadingSubmit ? 'DANG XU LY...' : 'TAO DON'}</button>
+            <button type="submit" disabled={loadingSubmit || loadingPreview || !previewFee} className="btn-create">{loadingSubmit ? 'ĐANG XỬ LÝ...' : 'TẠO ĐƠN'}</button>
           </div>
         </div>
       </div>

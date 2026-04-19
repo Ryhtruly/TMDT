@@ -271,7 +271,11 @@ export class GeneralRepository {
     return result.rows[0];
   }
 
-  async getAllFeedbacks() { return (await pool.query("SELECT f.*, u.phone FROM feedbacks f JOIN users u ON f.id_user = u.id_user ORDER BY f.id_feedback DESC")).rows; }
+  async getAllFeedbacks() { return (await pool.query("SELECT f.*, u.phone, u.full_name FROM feedbacks f JOIN users u ON f.id_user = u.id_user ORDER BY f.id_feedback DESC")).rows; }
+
+  async getFeedbacksByUser(id_user: number) {
+    return (await pool.query("SELECT * FROM feedbacks WHERE id_user = $1 ORDER BY id_feedback DESC", [id_user])).rows;
+  }
 
   async updateFeedbackStatus(id_feedback: number, status: string) {
     await pool.query('UPDATE feedbacks SET status = $1 WHERE id_feedback = $2', [status, id_feedback]);

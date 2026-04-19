@@ -166,6 +166,11 @@ export const getFeedbacks = async (req: Request, res: Response): Promise<void> =
   catch (e: any) { res.status(500).json({ status: 'error', message: e.message }); }
 };
 
+export const getMyFeedbacks = async (req: AuthRequest, res: Response): Promise<void> => {
+  try { res.json({ status: 'success', data: await generalService.getMyFeedbacks(req.user.id_user) }); }
+  catch (e: any) { res.status(500).json({ status: 'error', message: e.message }); }
+};
+
 export const updateFeedbackStatus = async (req: Request, res: Response): Promise<void> => {
   try { await generalService.updateFeedbackStatus(parseInt(String(req.params.id)), req.body.status); res.json({ status: 'success', message: 'Cập nhật trạng thái.' }); }
   catch (e: any) { res.status(400).json({ status: 'error', message: e.message }); }

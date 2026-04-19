@@ -1,0 +1,260 @@
+.inventory-page {
+  padding: 32px;
+  background-color: #f8fafc;
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+  color: #0f172a;
+}
+
+/* --- Hero Section --- */
+.inv-hero {
+  background: white;
+  padding: 24px 32px;
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+  margin-bottom: 32px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.inv-hero-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.inv-title {
+  font-size: 2rem;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  color: #2563eb;
+}
+
+.inv-sub-location {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.1rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* Stats Cards */
+.inv-stats-cards {
+  display: flex;
+  gap: 20px;
+}
+
+.inv-stat-card {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 200px;
+}
+
+.inv-stat-card.alerting {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.inv-stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 24px;
+}
+
+.inv-stat-icon.safe { background: #dbeafe; color: #2563eb; }
+.inv-stat-icon.warn { background: #fee2e2; color: #ef4444; }
+
+.inv-stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.inv-stat-val {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #0f172a;
+}
+
+.inv-stat-lbl {
+  font-size: 0.9rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* --- Body --- */
+.inv-body {
+  position: relative;
+  z-index: 3;
+}
+
+.inv-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 80px 0;
+  color: #64748b;
+  font-size: 1.2rem;
+  font-weight: 600;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+
+.inv-section {
+  margin-bottom: 40px;
+}
+
+.inv-section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #1e293b;
+  margin-bottom: 24px;
+}
+
+.inv-section-title.danger {
+  color: #ef4444;
+}
+
+.inv-empty {
+  background: white;
+  border-radius: 16px;
+  padding: 60px 20px;
+  text-align: center;
+  color: #64748b;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border: 2px dashed #cbd5e1;
+}
+
+.inv-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+/* --- Cards --- */
+.inv-card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.inv-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+  border-color: #94a3b8;
+}
+
+.inv-card-danger {
+  background: #fff5f5;
+  border-color: #fca5a5;
+}
+
+.inv-card-danger:hover {
+  border-color: #ef4444;
+}
+
+.inv-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px dashed #cbd5e1;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.inv-card-danger .inv-card-header {
+  border-bottom-color: #fca5a5;
+}
+
+.inv-code {
+  font-weight: 800;
+  font-size: 1.2rem;
+  color: #0f172a;
+}
+
+.inv-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+.inv-card-danger .inv-time {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.inv-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inv-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.inv-row.muted {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.inv-lbl {
+  color: #64748b;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.inv-val {
+  font-weight: 600;
+  color: #1e293b;
+  text-align: right;
+  word-break: break-word;
+}
+
+.inv-val.highlight {
+  color: #ea580c;
+  font-weight: 800;
+  font-size: 1.15rem;
+}
+
+.inv-val.flex-val {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}

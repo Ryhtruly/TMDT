@@ -7,8 +7,7 @@ import {
   FiMapPin,
   FiPackage,
   FiPlus,
-  FiSearch,
-  FiShield,
+  FiSearch
 } from 'react-icons/fi';
 import useAuth from '../../hooks/useAuth';
 import apiClient from '../../api/client';
@@ -98,37 +97,37 @@ const ShopLayout = () => {
           >
             <FiPackage size={18} />
           </div>
-          <h2>Ban Hang Tot</h2>
+          <h2>Bán Hàng Tốt</h2>
         </div>
 
         <div className="sidebar-user">
           <div className="avatar">{user?.phone?.substring(0, 2) || 'SH'}</div>
-          <div className="user-name">{user?.display_name || user?.phone || 'Chu cua hang'}</div>
-          <div className="user-role">Chu cua hang</div>
-          <div className="credit-limit">Kha dung tao don: {availableBalance.toLocaleString('vi-VN')} d</div>
+          <div className="user-name">{user?.display_name || user?.phone || 'Chủ cửa hàng'}</div>
+          <div className="user-role">Chủ cửa hàng</div>
+          <div className="credit-limit">Khả dụng tạo đơn: {availableBalance.toLocaleString('vi-VN')} đ</div>
           <div className="credit-limit" style={{ fontSize: '12px', opacity: 0.9 }}>
-            So du vi: {currentBalance.toLocaleString('vi-VN')} d
+            Số dư ví: {currentBalance.toLocaleString('vi-VN')} đ
           </div>
         </div>
 
         <nav className="sidebar-nav">
           <NavLink to="/dashboard" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            Bao cao - Live
+            Báo cáo - Live
           </NavLink>
           <NavLink to="/orders" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            Quan ly don hang
+            Quản lý đơn hàng
           </NavLink>
           <NavLink to="/stores" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            Quan ly cua hang
+            Quản lý cửa hàng
           </NavLink>
           <NavLink to="/wallet" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            COD va doi soat
+            COD và đối soát
           </NavLink>
           <NavLink to="/support" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            Ho tro - Khieu nai
+            Hỗ trợ - Khiếu nại
           </NavLink>
           <NavLink to="/profile" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
-            Cau hinh tai khoan
+            Cấu hình tài khoản
           </NavLink>
         </nav>
       </aside>
@@ -137,16 +136,15 @@ const ShopLayout = () => {
         <header className="shop-topbar">
           <div className="global-search">
             <FiSearch color="var(--slate-400)" size={18} />
-            <input type="text" placeholder="Tim bang SDT, Ma don, Ten nguoi nhan..." />
+            <input type="text" placeholder="Tìm bằng SĐT, Mã đơn, Tên người nhận..." />
             <span className="search-shortcut">Ctrl K</span>
           </div>
 
           <div className="topbar-right">
             <button className="btn-create-order" onClick={() => navigate('/orders/create')}>
-              <FiPlus size={18} />
-              Tao don hang
+              <FiPlus /> Tạo đơn hàng
             </button>
-            <div className="store-selector" title="Doi kho lay hang">
+            <div className="store-selector" title="Đổi kho lấy hàng">
               <FiMapPin />
               <select
                 value={defaultStoreId}
@@ -161,7 +159,7 @@ const ShopLayout = () => {
                   paddingRight: '12px',
                 }}
               >
-                {stores.length === 0 && <option value="">Kho mac dinh</option>}
+                {stores.length === 0 && <option value="">Kho mặc định</option>}
                 {stores.map((s) => (
                   <option key={s.id_store} value={s.id_store} style={{ color: 'black' }}>
                     {s.store_name}
@@ -170,16 +168,18 @@ const ShopLayout = () => {
               </select>
               <span>▾</span>
             </div>
-            <button className="tag-btn orange" onClick={() => navigate('/orders/create?type=1')}>
-              <FiBox /> Hang nhe &lt; 20kg
-            </button>
-            <button className="tag-btn" onClick={() => navigate('/orders/create?type=2')}>
-              <FiPackage /> Hang nang ≥ 20kg
-            </button>
-            <button className="btn-logout" title="Thong bao">
+            <div className="quick-stats">
+              <span className="stat-pill success" onClick={() => navigate('/orders/create?type=1')}>
+                <FiPackage size={14} /> Hàng nhẹ &lt; 20kg
+              </span>
+              <span className="stat-pill warning" onClick={() => navigate('/orders/create?type=2')}>
+                <FiBox size={14} /> Hàng nặng &ge; 20kg
+              </span>
+            </div>
+            <button className="btn-logout" title="Thông báo">
               <FiBell />
             </button>
-            <button className="btn-logout" onClick={handleLogout} title="Dang xuat">
+            <button className="btn-logout" onClick={handleLogout} title="Đăng xuất">
               <FiLogOut />
             </button>
           </div>

@@ -10,7 +10,7 @@ const Support = () => {
 
   const fetchTickets = async () => {
     try {
-      const res = await apiClient.get('/support') as any;
+      const res = await apiClient.get('/feedbacks/me') as any;
       if (res?.status === 'success') {
         setTickets(res.data || []);
       }
@@ -22,18 +22,17 @@ const Support = () => {
   };
 
   useEffect(() => {
-    // Backend API hiện chưa có endpoint /support riêng cho Shop 
-    // Ta giả lập state hoặc chờ backend update
-    setLoading(false);
-    setTickets([
-       { id_incident: 1, id_order: null, description: 'Lỗi phần mềm, không thể tính phí.', created_at: new Date().toISOString(), status: 'PENDING' }
-    ]);
+    fetchTickets();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await apiClient.post('/support', formData);
+      const title = formData.id_order ? `Sự cố đơn ${formData.id_order}` : 'Yêu cầu hỗ trợ chung';
+      await apiClient.post('/feedbacks', {
+        title,
+        content: formData.description
+      });
       alert('Đã gửi yêu cầu hỗ trợ thành công!');
       setFormData({ id_order: '', description: '' });
       fetchTickets();
@@ -102,17 +101,17 @@ const Support = () => {
           ) : (
             <div className="ticket-list">
               {tickets.map(t => (
-                <div key={t.id_incident} className="ticket-card">
+                <div key={t.id_feedback} className="ticket-card">
                    <div className="ticket-header">
                       <span className="ticket-id">
                         <FiMessageSquare style={{marginRight: '6px', verticalAlign: 'middle'}}/>
-                        Yêu cầu #{t.id_incident}
+                        {t.title}
                       </span>
-                      <span className={`status-badge ${t.status === 'RESOLVED' ? 'success' : 'warning'}`}>
-                        {t.status === 'RESOLVED' ? 'ĐÃ XỬ LÝ' : 'ĐANG CHỜ'}
+                      <span className={`status-badge ${t.status === 'RESOLVED' || t.status === 'ĐÃ XỬ LÝ' ? 'success' : 'warning'}`}>
+                        {t.status === 'RESOLVED' || t.status === 'ĐÃ XỬ LÝ' ? 'ĐÃ XỬ LÝ' : 'ĐANG CHỜ'}
                       </span>
                    </div>
-                   <div className="ticket-desc">{t.description}</div>
+                   <div className="ticket-desc">{t.content}</div>
                    <div className="ticket-date" style={{marginTop: '12px'}}>{new Date(t.created_at).toLocaleString('vi-VN')}</div>
                 </div>
               ))}

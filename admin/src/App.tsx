@@ -5,7 +5,6 @@ import Dashboard from './pages/Dashboard';
 import Infrastructure from './pages/Infrastructure';
 import Employees from './pages/Employees';
 import Payouts from './pages/Payouts';
-import Bags from './pages/Bags';
 import Settings from './pages/Settings';
 import Promotions from './pages/Promotions';
 import CustomerSupport from './pages/CustomerSupport';
@@ -23,7 +22,6 @@ function App() {
         <Route index element={<Dashboard />} />
         <Route path="infrastructure" element={<Infrastructure />} />
         <Route path="employees" element={<Employees />} />
-        <Route path="bags" element={<Bags />} />
         <Route path="payouts" element={<Payouts />} />
         <Route path="settings" element={<Settings />} />
         <Route path="promotions" element={<Promotions />} />
