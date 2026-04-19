@@ -71,14 +71,12 @@ export class AdminService {
     try {
       await client.query('BEGIN');
       
-      // Bước 1: Khai báo vào bảng Locations (Tọa độ)
       const locRes = await client.query(
         'INSERT INTO locations (location_type, location_name, address, latitude, longitude) VALUES ($1, $2, $3, $4, $5) RETURNING id_location',
         ['HUB', hubData.location_name, hubData.address, hubData.latitude, hubData.longitude]
       );
       const id_location = locRes.rows[0].id_location;
 
-      // Bước 2: Tạo Hub neo theo thẻ Location
       const hubRes = await client.query(
         'INSERT INTO hubs (id_location, hub_name, description) VALUES ($1, $2, $3) RETURNING id_hub',
         [id_location, hubData.location_name, hubData.description]
@@ -125,14 +123,13 @@ export class AdminService {
   async setAreaCoverage(areaData: { id_spoke: number, province: string, district: string, area_type: string }) {
     const client = await adminRepo.getTxClient();
     try {
-      // Dùng cú pháp UPSERT hoặc Insert bình thường bắt lỗi duplicate Unique
       const result = await client.query(
         'INSERT INTO areas (id_spoke, province, district, area_type) VALUES ($1, $2, $3, $4) RETURNING *',
         [areaData.id_spoke, areaData.province, areaData.district, areaData.area_type]
       );
       return result.rows[0];
     } catch (error: any) {
-      if(error.code === '23505') throw new Error('Quận/Huyện này đã bị Bưu cục khác quản lý (Lỗi Unique Constraint Zone)!');
+      if (error.code === '23505') throw new Error('Quận/Huyện này đã bị Bưu cục khác quản lý (Lỗi Unique Constraint Zone)!');
       throw new Error('Không thể phân vùng khu vực này.');
     } finally {
       client.release();
@@ -297,12 +294,10 @@ export class AdminService {
     return true;
   }
 
-  // --- CẤU HÌNH % PHÍ BẢO HIỂM ĐỘNG (dạng pricing_rule đặc biệt) ---
-  // Lưu vào pricing_rules với route_type = 'INSURANCE' để tách biệt
+  // --- CẤU HÌNH % PHÍ BẢO HIỂM ĐỘNG ---
   async setInsuranceConfig(threshold: number, rate_percent: number) {
     const client = await adminRepo.getTxClient();
     try {
-      // Dùng UPSERT: nếu đã có thì cập nhật, chưa có thì thêm mới
       const result = await client.query(`
         INSERT INTO pricing_rules (route_type, area_type, weight_step, price)
         VALUES ('INSURANCE', 'CONFIG', $1, $2)
@@ -311,207 +306,11 @@ export class AdminService {
         RETURNING *
       `, [threshold, rate_percent]);
       return {
-        threshold: threshold,
-        rate_percent: rate_percent,
+        threshold,
+        rate_percent,
         note: `Hàng trị giá trên ${threshold.toLocaleString()}đ sẽ phải chịu phí bảo hiểm ${rate_percent}%`
       };
-    } catch(error: any) {
-      // Nếu DB chưa có Unique Constraint trên 3 cột, dùng UPDATE thay thế
-      await client.query(
-        'UPDATE pricing_rules SET price = $1 WHERE route_type = $2 AND area_type = $3',
-        [rate_percent, 'INSURANCE', 'CONFIG']
-      );
-      return { threshold, rate_percent, note: 'Cập nhật cấu hình phí bảo hiểm thành công.' };
-        'INSERT INTO areas (id_spoke, province, district, area_type) VALUES ($1, $2, $3, $4) RETURNING *',
-        [areaData.id_spoke, areaData.province, areaData.district, areaData.area_type]
-      );
-      return result.rows[0];
     } catch (error: any) {
-      if(error.code === '23505') throw new Error('Quận/Huyện này đã bị Bưu cục khác quản lý (Lỗi Unique Constraint Zone)!');
-      throw new Error('Không thể phân vùng khu vực này.');
-    } finally {
-      client.release();
-    }
-  }
-
-  async updatePricingRule(id_rule: number, price: number, base_weight_g: number, extra_per_500g: number) {
-    const client = await adminRepo.getTxClient();
-    try {
-      const result = await client.query(
-        'UPDATE pricing_rules SET price = $1, base_weight_g = $2, extra_per_500g = $3 WHERE id_rule = $4 RETURNING *',
-        [price, base_weight_g, extra_per_500g, id_rule]
-      );
-      if (!result.rows[0]) throw new Error(`Không tìm thấy Pricing Rule ID=${id_rule}`);
-      return result.rows[0];
-    } finally {
-      client.release();
-    }
-  }
-
-  // --- SỬA TÊN HUB ---
-  async updateHub(id_hub: number, hub_name: string, description: string) {
-    const updated = await adminRepo.updateHub(id_hub, hub_name, description);
-    if (!updated) throw new Error(`Không tìm thấy Hub ID=${id_hub}`);
-    return updated;
-  }
-
-  // --- SỬA TÊN BƯU CỤC SPOKE ---
-  async updateSpoke(id_spoke: number, spoke_name: string) {
-    const updated = await adminRepo.updateSpoke(id_spoke, spoke_name);
-    if (!updated) throw new Error(`Không tìm thấy Spoke ID=${id_spoke}`);
-    return updated;
-  }
-
-  // --- XÓA HUB ---
-  async deleteHub(id_hub: number) {
-    try {
-      const deleted = await adminRepo.deleteHub(id_hub);
-      if (!deleted) throw new Error(`Không tìm thấy Hub ID=${id_hub}`);
-      return true;
-    } catch (error: any) {
-      if (error.code === '23503') throw new Error('Không thể xóa Kho Trung Tâm này vì vẫn còn Bưu Cục (Spokes) hoặc Nhân Sự đang liên kết!');
-      throw error;
-    }
-  }
-
-  // --- XÓA BƯU CỤC SPOKE ---
-  async deleteSpoke(id_spoke: number) {
-    try {
-      const deleted = await adminRepo.deleteSpoke(id_spoke);
-      if (!deleted) throw new Error(`Không tìm thấy Spoke ID=${id_spoke}`);
-      return true;
-    } catch (error: any) {
-      if (error.code === '23503') throw new Error('Không thể xóa Bưu Cục này vì vẫn còn Khu vực phân phối, Nhân sự hoặc Đơn hàng đang liên kết!');
-      throw error;
-    }
-  }
-
-  // --- CẤP THÊM ROLE CHO USER ---
-  async grantRoleToUser(id_user: number, id_role: number) {
-    const allRoles = await adminRepo.getAllRoles();
-    const validRole = allRoles.find(r => r.id_role === id_role);
-    if (!validRole) throw new Error(`Role ID=${id_role} không tồn tại trong hệ thống.`);
-
-    await adminRepo.grantRole(id_user, id_role);
-    const currentRoles = await adminRepo.findUserRoles(id_user);
-    return { id_user, roles: currentRoles };
-  }
-
-  // --- THU HỒI ROLE CỦA USER ---
-  async revokeRoleFromUser(id_user: number, id_role: number) {
-    const deleted = await adminRepo.revokeRole(id_user, id_role);
-    if (!deleted) throw new Error(`User không có Role ID=${id_role} này hoặc User không tồn tại.`);
-    const currentRoles = await adminRepo.findUserRoles(id_user);
-    return { id_user, roles: currentRoles };
-  }
-
-  // --- LẤY DANH SÁCH TẤT CẢ ROLES ---
-  async getAllRoles() {
-    return await adminRepo.getAllRoles();
-  }
-
-  async getEmployees() {
-    return await adminRepo.getEmployees();
-  }
-
-  async deactivateEmployee(id_user: number) {
-    const result = await adminRepo.deactivateEmployee(id_user);
-    if (!result) throw new Error(`Không tìm thấy User ID=${id_user}`);
-    return result;
-  }
-
-  async getAllShops() {
-    return await adminRepo.getAllShops();
-  }
-
-  async getAllOrders(status?: string, limit?: number, offset?: number) {
-    return await adminRepo.getAllOrders(status, limit, offset);
-  }
-
-  async getAllBags() {
-    return await adminRepo.getAllBags();
-  }
-
-  async getPricingRules() {
-    const client = await adminRepo.getTxClient();
-    try {
-      const result = await client.query('SELECT * FROM pricing_rules ORDER BY id_rule ASC');
-      return result.rows;
-    } finally {
-      client.release();
-    }
-  }
-
-  async getServiceTypes() {
-    const client = await adminRepo.getTxClient();
-    try {
-      const result = await client.query('SELECT * FROM service_types ORDER BY id_service ASC');
-      return result.rows;
-    } finally {
-      client.release();
-    }
-  }
-
-  async updateServiceType(id_service: number, base_multiplier: number, description: string) {
-    const client = await adminRepo.getTxClient();
-    try {
-      const result = await client.query(
-        'UPDATE service_types SET base_multiplier = $1, description = $2 WHERE id_service = $3 RETURNING *',
-        [base_multiplier, description, id_service]
-      );
-      if (result.rowCount === 0) throw new Error('Service type không tồn tại');
-      return result.rows[0];
-    } finally {
-      client.release();
-    }
-  }
-
-  async getShipperWardAssignments() {
-    return await adminRepo.getShipperWardAssignments();
-  }
-
-  async createShipperWardAssignment(data: any) {
-    const { id_shipper, id_spoke, province, district, ward, priority } = data;
-    if (!id_shipper || !id_spoke || !province || !district) {
-      throw new Error('Thieu thong tin bat buoc: id_shipper, id_spoke, province, district.');
-    }
-
-    return await adminRepo.createShipperWardAssignment({
-      id_shipper: parseInt(id_shipper),
-      id_spoke: parseInt(id_spoke),
-      province: String(province).trim(),
-      district: String(district).trim(),
-      ward: ward ? String(ward).trim() : null,
-      priority: priority ? parseInt(priority) : 100,
-    });
-  }
-
-  async deleteShipperWardAssignment(id_assignment: number) {
-    const deleted = await adminRepo.deleteShipperWardAssignment(id_assignment);
-    if (!deleted) throw new Error(`Khong tim thay assignment ID=${id_assignment}`);
-    return true;
-  }
-
-  // --- CẤU HÌNH % PHÍ BẢO HIỂM ĐỘNG (dạng pricing_rule đặc biệt) ---
-  // Lưu vào pricing_rules với route_type = 'INSURANCE' để tách biệt
-  async setInsuranceConfig(threshold: number, rate_percent: number) {
-    const client = await adminRepo.getTxClient();
-    try {
-      // Dùng UPSERT: nếu đã có thì cập nhật, chưa có thì thêm mới
-      const result = await client.query(`
-        INSERT INTO pricing_rules (route_type, area_type, weight_step, price)
-        VALUES ('INSURANCE', 'CONFIG', $1, $2)
-        ON CONFLICT (route_type, area_type, weight_step)
-        DO UPDATE SET price = EXCLUDED.price
-        RETURNING *
-      `, [threshold, rate_percent]);
-      return {
-        threshold: threshold,
-        rate_percent: rate_percent,
-        note: `Hàng trị giá trên ${threshold.toLocaleString()}đ sẽ phải chịu phí bảo hiểm ${rate_percent}%`
-      };
-    } catch(error: any) {
-      // Nếu DB chưa có Unique Constraint trên 3 cột, dùng UPDATE thay thế
       await client.query(
         'UPDATE pricing_rules SET price = $1 WHERE route_type = $2 AND area_type = $3',
         [rate_percent, 'INSURANCE', 'CONFIG']
@@ -522,7 +321,7 @@ export class AdminService {
     }
   }
 
-  // Bật/Tắt tuyến đường
+  // --- BẬT/TẮT TUYẾN ĐƯỜNG ---
   async toggleRoute(id_route: number) {
     const { pool } = require('../config/db');
     const result = await pool.query(

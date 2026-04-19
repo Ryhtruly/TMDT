@@ -321,7 +321,7 @@ export const deleteShipperWardAssignment = async (req: Request, res: Response): 
 // Xem chi tiết đơn hàng theo tracking code (Admin)
 export const getOrderDetailByTracking = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { tracking_code } = req.params;
+    const tracking_code = String(req.params.tracking_code);
     const { OrderService } = require('../services/order.service');
     const orderSvc = new OrderService();
     const data = await orderSvc.trackOrder(tracking_code.toUpperCase());
