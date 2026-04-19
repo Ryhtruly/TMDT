@@ -74,6 +74,21 @@ const Routes = () => {
     }
   };
 
+  const handleToggle = async (route: RouteNode, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const confirm = window.confirm(
+      `${route.is_active ? 'Vô hiệu hóa' : 'Kích hoạt'} tuyến RT-${route.id_route}?\n` +
+      `${route.origin_name} → ${route.dest_name}`
+    );
+    if (!confirm) return;
+    try {
+      await apiClient.put(`/admin/routes/${route.id_route}/toggle`);
+      fetchRoutes();
+    } catch (err: any) {
+      alert('Lỗi: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
   const handleExpand = async (route: RouteNode) => {
     if (expandedId === route.id_route) {
       setExpandedId(null);
@@ -213,7 +228,15 @@ const Routes = () => {
                           {isActive ? '● Hoạt động' : '○ Tạm ngưng'}
                         </span>
                       </td>
-                      <td className="text-right">
+                      <td className="text-right" style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <button
+                          className={`action-btn ${isActive ? 'text-danger' : 'text-success'}`}
+                          style={{ fontSize: '0.75rem', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                          onClick={(e) => handleToggle(route, e)}
+                          title={isActive ? 'Vô hiệu hóa tuyến' : 'Kích hoạt tuyến'}
+                        >
+                          {isActive ? '■ Tắt' : '▶ Bật'}
+                        </button>
                         <button className="action-btn text-primary" title="Xem chặng dừng">
                           {expandedId === route.id_route ? <FiChevronUp /> : <FiChevronDown />}
                         </button>

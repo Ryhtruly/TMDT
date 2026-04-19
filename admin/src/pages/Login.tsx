@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiPhone, FiLock } from 'react-icons/fi';
+import { FiPhone, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
 import apiClient from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../utils/phone';
@@ -9,6 +9,7 @@ import './Login.css';
 const Login = () => {
   const [phone, setPhone] = useState('0901234567');
   const [password, setPassword] = useState('Admin@123');
+  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
@@ -82,12 +83,21 @@ const Login = () => {
             <div className="input-wrapper">
               <FiLock className="input-icon" />
               <input 
-                type="password" 
+                type={showPw ? 'text' : 'password'} 
                 placeholder="Nhập mật khẩu" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required 
               />
+              <button
+                type="button"
+                className="input-eye-btn"
+                onClick={() => setShowPw(v => !v)}
+                tabIndex={-1}
+                aria-label={showPw ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+              >
+                {showPw ? <FiEyeOff size={16} /> : <FiEye size={16} />}
+              </button>
             </div>
           </div>
 

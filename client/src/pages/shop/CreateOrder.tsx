@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FiBox, FiChevronRight, FiPhone } from 'react-icons/fi';
+import { FiBox, FiChevronRight, FiPhone, FiTag, FiCheck, FiX } from 'react-icons/fi';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import apiClient from '../../api/client';
 import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../../utils/phone';
@@ -33,6 +33,13 @@ const CreateOrder = () => {
   const [previewFee, setPreviewFee] = useState<any>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [loadingSubmit, setLoadingSubmit] = useState(false);
+
+  // Promo code state
+  const [promos, setPromos] = useState<any[]>([]);
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoError, setPromoError] = useState('');
 
   const [formData, setFormData] = useState({
     id_store: '',
@@ -88,6 +95,10 @@ const CreateOrder = () => {
     };
 
     load().catch(console.error);
+    // Load promos
+    apiClient.get('/promotions').then((res: any) => {
+      if (res?.status === 'success') setPromos(res.data || []);
+    }).catch(() => {});
     fetch('https://provinces.open-api.vn/api/p/').then((res) => res.json()).then(setProvinces).catch(console.error);
     const onStoreChanged = () => {
       const id = localStorage.getItem('default_store');
@@ -211,6 +222,7 @@ const CreateOrder = () => {
         id_dest_area: idDestArea,
         pickup_shift: pickupShift || 'Ca mac dinh',
         dropoff_spoke_id: dropoffSpokeId ? Number(dropoffSpokeId) : null,
+        promo_code: appliedPromo?.code || undefined,
       })) as any;
 
       window.dispatchEvent(new Event('wallet_updated'));
@@ -241,6 +253,31 @@ const CreateOrder = () => {
   const flow = previewFee?.payment_flow || {};
   const walletCheck = previewFee?.wallet_check || {};
   const billableWeight = Math.max(Number(formData.weight || 0), (Number(formData.length || 0) * Number(formData.width || 0) * Number(formData.height || 0)) / 5);
+
+  // Promo discount calculation
+  const baseTotalFee = Number(fee.total_fee || 0);
+  const promoDiscount = appliedPromo
+    ? appliedPromo.discount_type === 'PERCENT'
+      ? Math.min(baseTotalFee * (appliedPromo.discount_value / 100), appliedPromo.max_discount || Infinity)
+      : Math.min(appliedPromo.discount_value, baseTotalFee)
+    : 0;
+  const finalTotalFee = Math.max(0, baseTotalFee - promoDiscount);
+
+  const handleApplyPromoCode = async () => {
+    setPromoError('');
+    const code = promoCode.trim().toUpperCase();
+    if (!code) { setPromoError('Vui lòng nhập mã khuyến mãi.'); return; }
+    try {
+      const res: any = await apiClient.post('/promotions/apply', { code });
+      if (res?.status === 'success') {
+        setAppliedPromo(res.data);
+        setShowPromoModal(false);
+        setPromoCode('');
+      }
+    } catch (err: any) {
+      setPromoError(err?.response?.data?.message || 'Mã không hợp lệ hoặc đã hết lượt sử dụng.');
+    }
+  };
 
   return (
     <form className="create-order-page" onSubmit={handleSubmit}>
@@ -365,7 +402,8 @@ const CreateOrder = () => {
           <div className="bill-content">
             <div className="bill-row"><span>Phi dich vu</span><strong>{Number(fee.shipping_fee || 0).toLocaleString('vi-VN')} d</strong></div>
             {Number(fee.insurance_fee || 0) > 0 && <div className="bill-row"><span>Phi bao hiem</span><strong>{Number(fee.insurance_fee || 0).toLocaleString('vi-VN')} d</strong></div>}
-            <div className="bill-row total"><span>Tong phi:</span><span>{Number(fee.total_fee || 0).toLocaleString('vi-VN')} d</span></div>
+            {promoDiscount > 0 && <div className="bill-row" style={{ color: '#16a34a' }}><span>🎟 Giảm giá ({appliedPromo.code})</span><strong>−{promoDiscount.toLocaleString('vi-VN')} d</strong></div>}
+            <div className="bill-row total"><span>Tổng phí:</span><span style={{ color: promoDiscount > 0 ? '#16a34a' : undefined }}>{finalTotalFee.toLocaleString('vi-VN')} d</span></div>
 
             {!previewFee && <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--slate-500)' }}>Chon dia chi nguoi nhan de xem phi.</div>}
             {previewFee && (
@@ -380,7 +418,25 @@ const CreateOrder = () => {
             )}
             {previewFee && formData.payer_type === 'SENDER' && formData.fee_payment_method === 'WALLET' && <div style={{ marginTop: '12px', fontSize: '12px', color: walletCheck.is_sufficient ? '#0f766e' : '#b91c1c' }}>So du kha dung: {Number(walletCheck.available_balance || 0).toLocaleString('vi-VN')} d. Sau tao don con: {Math.max(0, Number(walletCheck.available_balance || 0) - Number(flow.sender_charge_now || 0)).toLocaleString('vi-VN')} d.</div>}
             {walletCheck.warning && <div style={{ marginTop: '10px', fontSize: '12px', color: walletCheck.is_sufficient ? '#0f766e' : '#b91c1c' }}>{walletCheck.warning}</div>}
-            <div className="promo-btn" style={{ marginTop: '20px' }}><span>Ma khuyen mai tu GHN</span><FiChevronRight /></div>
+            {/* Promo Code */}
+            <div
+              className="promo-btn"
+              style={{ marginTop: '20px', cursor: 'pointer', background: appliedPromo ? '#f0fdf4' : undefined, borderColor: appliedPromo ? '#16a34a' : undefined }}
+              onClick={() => setShowPromoModal(true)}
+            >
+              {appliedPromo ? (
+                <>
+                  <FiTag size={14} color="#16a34a" />
+                  <span style={{ color: '#16a34a', fontWeight: 700 }}>{appliedPromo.code} — Giảm {appliedPromo.discount_type === 'PERCENT' ? `${appliedPromo.discount_value}%` : `${Number(appliedPromo.discount_value).toLocaleString('vi-VN')}đ`}</span>
+                  <FiX size={14} color="#16a34a" onClick={(e) => { e.stopPropagation(); setAppliedPromo(null); }} style={{ marginLeft: 'auto', cursor: 'pointer' }} />
+                </>
+              ) : (
+                <>
+                  <span>Mã khuyến mãi</span>
+                  <FiChevronRight />
+                </>
+              )}
+            </div>
           </div>
 
           <div style={{ padding: '0 24px 16px 24px' }}>
@@ -418,8 +474,67 @@ const CreateOrder = () => {
       {showStoreSelector && <div className="modal-overlay" onClick={() => setShowStoreSelector(false)}><div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}><div className="modal-header"><h2>Chon kho lay hang</h2><button type="button" className="close-btn" onClick={() => setShowStoreSelector(false)}>&times;</button></div><div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '16px' }}>{stores.map((s) => <div key={s.id_store} onClick={() => { setFormData((p) => ({ ...p, id_store: String(s.id_store) })); localStorage.setItem('default_store', String(s.id_store)); window.dispatchEvent(new Event('default_store_changed')); setShowStoreSelector(false); }} style={{ padding: '12px', border: String(s.id_store) === String(formData.id_store) ? '2px solid var(--primary-color)' : '1px solid #ddd', borderRadius: '8px', cursor: 'pointer' }}><div style={{ fontWeight: 600, color: '#000' }}>{s.store_name}</div><div style={{ fontSize: '13px', color: '#555', marginTop: '4px' }}>{s.phone}</div><div style={{ fontSize: '13px', color: '#555' }}>{s.address}</div></div>)}</div></div></div>}
 
       {showAddressModal && <div className="modal-overlay" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}><div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}><div className="modal-header"><h2>{addressModalType === 'SENDER' ? 'Sua dia chi kho lay hang' : 'Nhap dia chi nguoi nhan'}</h2><button type="button" className="close-btn" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}>&times;</button></div><div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '16px' }}><select className="ghn-input" value={selectedProv?.code || ''} onChange={handleProvChange}><option value="">Chon Tinh/Thanh pho</option>{provinces.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}</select><select className="ghn-input" value={selectedDist?.code || ''} onChange={handleDistChange} disabled={!selectedProv}><option value="">Chon Quan/Huyen</option>{districts.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}</select><select className="ghn-input" value={selectedWard?.code || ''} onChange={(e) => setSelectedWard(wards.find((w) => String(w.code) === e.target.value))} disabled={!selectedDist}><option value="">Chon Phuong/Xa</option>{wards.map((w) => <option key={w.code} value={w.code}>{w.name}</option>)}</select><input type="text" className="ghn-input" value={streetNum} onChange={(e) => setStreetNum(e.target.value)} placeholder="Nhap so nha, ten duong..." disabled={!selectedWard} /></div><div className="modal-footer"><button type="button" className="tag-btn" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}>Huy</button><button type="button" className="btn-create" onClick={saveAddress}>Xac nhan</button></div></div></div>}
+
+      {/* Promo Modal */}
+      {showPromoModal && (
+        <div className="modal-overlay" onClick={() => { setShowPromoModal(false); setPromoError(''); }}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h2>🎟 Chọn Mã Khuyến Mãi</h2>
+              <button type="button" className="close-btn" onClick={() => { setShowPromoModal(false); setPromoError(''); }}>&times;</button>
+            </div>
+            {/* Manual input */}
+            <div style={{ padding: '16px 0', display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                className="ghn-input"
+                placeholder="Nhập mã khuyến mãi..."
+                value={promoCode}
+                onChange={e => setPromoCode(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === 'Enter' && handleApplyPromoCode()}
+                style={{ flex: 1 }}
+              />
+              <button type="button" className="btn-create" style={{ padding: '10px 20px' }} onClick={handleApplyPromoCode}>Áp dụng</button>
+            </div>
+            {promoError && <div style={{ color: '#b91c1c', fontSize: '13px', marginBottom: '12px' }}>{promoError}</div>}
+            {/* List of available promos */}
+            {promos.length > 0 && (
+              <div>
+                <div style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', marginBottom: '10px' }}>Mã đang có hiệu lực</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
+                  {promos.map((p: any) => (
+                    <div
+                      key={p.id_promo}
+                      onClick={() => { setAppliedPromo(p); setShowPromoModal(false); setPromoCode(''); setPromoError(''); }}
+                      style={{
+                        border: appliedPromo?.id_promo === p.id_promo ? '2px solid #16a34a' : '1px solid #e5e7eb',
+                        borderRadius: '10px', padding: '12px 14px', cursor: 'pointer',
+                        background: appliedPromo?.id_promo === p.id_promo ? '#f0fdf4' : '#f9fafb',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#1e293b', fontFamily: 'monospace', fontSize: '15px' }}>{p.code}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                          Giảm {p.discount_type === 'PERCENT' ? `${p.discount_value}%` : `${Number(p.discount_value).toLocaleString('vi-VN')}đ`}
+                          {p.max_discount ? ` (tối đa ${Number(p.max_discount).toLocaleString('vi-VN')}đ)` : ''}
+                          {p.min_order_value ? ` — Đơn từ ${Number(p.min_order_value).toLocaleString('vi-VN')}đ` : ''}
+                        </div>
+                        {p.expires_at && <div style={{ fontSize: '11px', color: '#94a3b8' }}>HSD: {new Date(p.expires_at).toLocaleDateString('vi-VN')}</div>}
+                      </div>
+                      {appliedPromo?.id_promo === p.id_promo && <FiCheck size={18} color="#16a34a" />}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {promos.length === 0 && <div style={{ textAlign: 'center', color: '#9ca3af', padding: '20px 0', fontSize: '14px' }}>Hiện chưa có mã khuyến mãi nào.</div>}
+          </div>
+        </div>
+      )}
     </form>
   );
 };
 
 export default CreateOrder;
+

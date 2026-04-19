@@ -7,7 +7,8 @@ import {
   configPricing, getAllRoles, grantRole, revokeRole, setInsuranceConfig,
   getEmployees, deactivateEmployee, getAllShops, getAllOrders, getAllBags,
   getPricingRules, getServiceTypes, updateServiceType, getShipperWardAssignments,
-  createShipperWardAssignment, deleteShipperWardAssignment, autoGenerateRoute
+  createShipperWardAssignment, deleteShipperWardAssignment, autoGenerateRoute,
+  getOrderDetailByTracking, toggleRoute
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -20,6 +21,10 @@ router.use(checkRoles(['ADMIN']));
 
 // API Auto-Generate Tuyến Đường
 router.post('/routes/auto-generate', autoGenerateRoute);
+// Toggle active/inactive tuyến đường
+router.put('/routes/:id/toggle', toggleRoute);
+// Xem chi tiết đơn hàng theo tracking code (Admin)
+router.get('/orders/:tracking_code/detail', getOrderDetailByTracking);
 
 // API Khởi Tạo Nhân Viên Mới (Kèm phân Hub/Spoke/Role)
 router.post('/employees', createEmployee);

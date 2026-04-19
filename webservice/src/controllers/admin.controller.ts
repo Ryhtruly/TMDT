@@ -317,3 +317,27 @@ export const deleteShipperWardAssignment = async (req: Request, res: Response): 
     res.status(400).json({ status: 'error', message: error.message });
   }
 };
+
+// Xem chi tiết đơn hàng theo tracking code (Admin)
+export const getOrderDetailByTracking = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { tracking_code } = req.params;
+    const { OrderService } = require('../services/order.service');
+    const orderSvc = new OrderService();
+    const data = await orderSvc.trackOrder(tracking_code.toUpperCase());
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(404).json({ status: 'error', message: error.message });
+  }
+};
+
+// Bật/Tắt tuyến đường (Admin)
+export const toggleRoute = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id_route = parseInt(String(req.params.id));
+    const data = await adminService.toggleRoute(id_route);
+    res.json({ status: 'success', ...data });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
