@@ -168,14 +168,12 @@ const ShopLayout = () => {
               </select>
               <span>▾</span>
             </div>
-            <div className="quick-stats">
-              <span className="stat-pill success" onClick={() => navigate('/orders/create?type=1')}>
-                <FiPackage size={14} /> Hàng nhẹ &lt; 20kg
-              </span>
-              <span className="stat-pill warning" onClick={() => navigate('/orders/create?type=2')}>
-                <FiBox size={14} /> Hàng nặng &ge; 20kg
-              </span>
-            </div>
+            <button className="tag-btn orange" onClick={() => navigate('/orders/create?type=1')}>
+              <FiBox /> Hàng nhẹ &lt; 20kg
+            </button>
+            <button className="tag-btn" onClick={() => navigate('/orders/create?type=2')}>
+              <FiPackage /> Hàng nặng &ge; 20kg
+            </button>
             <button className="btn-logout" title="Thông báo">
               <FiBell />
             </button>
