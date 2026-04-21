@@ -255,15 +255,27 @@ export class ShopService {
     const wallet = await shopRepo.getWalletByUserId(id_user);
     if (!wallet) throw new Error('Ví tiền không tồn tại.');
     const history = await shopRepo.getTransactionHistory(wallet.id_wallet);
-    const available_balance =
-      Number(wallet.balance || 0) +
-      Number(wallet.credit_limit || 0) -
-      Number(wallet.used_credit || 0);
+    const available_balance = Number(wallet.available_balance || 0);
+    const usedCredit = Number(wallet.used_credit || 0);
+    const debtNotice = usedCredit > 0
+      ? {
+          should_show: true,
+          used_credit: usedCredit,
+          credit_limit: Number(wallet.credit_limit || 0),
+          debt_due_at: wallet.debt_due_at,
+          debt_days_until_due: wallet.debt_days_until_due,
+          is_locked: !!wallet.is_debt_locked,
+          message: wallet.is_debt_locked
+            ? `Tai khoan dang bi khoa tao don do no qua han/qua han muc. Vui long nap ${usedCredit.toLocaleString('vi-VN')}d de mo lai dich vu.`
+            : `Tai khoan dang no ${usedCredit.toLocaleString('vi-VN')}d. Vui long thanh toan truoc han de tranh bi khoa dich vu.`,
+        }
+      : { should_show: false };
 
     return {
       wallet: {
         ...wallet,
         available_balance,
+        debt_notice: debtNotice,
       },
       history,
     };
@@ -274,7 +286,10 @@ export class ShopService {
     if (amount > 100000000) throw new Error('Số tiền nạp tối đa mỗi lần là 100 triệu đồng.');
     
     // Yêu cầu thư viện payOS
-    const { payOS } = require('../config/payos');
+    const { payOS, isPayOSConfigured } = require('../config/payos');
+    if (!isPayOSConfigured) {
+      throw new Error('Chua cau hinh PayOS. Can PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY trong webservice/.env.');
+    }
 
     const wallet = await shopRepo.getWalletByUserId(id_user);
     if (!wallet) throw new Error('Không tìm thấy ví tiền.');

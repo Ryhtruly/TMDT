@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client';
-import { FiPackage, FiCheckCircle, FiTruck, FiBox, FiCornerDownRight } from 'react-icons/fi';
+import { FiPackage, FiCheckCircle, FiTruck, FiBox, FiCornerDownRight, FiRefreshCw, FiCopy } from 'react-icons/fi';
 import './Bagging.css';
 
 interface OrderItem {
@@ -19,17 +19,64 @@ interface BagGroup {
   orders: OrderItem[];
 }
 
+interface BagSummary {
+  id_bag: number;
+  bag_code: string;
+  origin_hub_name: string;
+  dest_hub_name: string;
+  dest_spoke_name?: string | null;
+  status: string;
+  item_count: number;
+  items: Array<{
+    id_order: number;
+    tracking_code: string;
+    receiver_name: string;
+    status: string;
+    province: string;
+    district: string;
+  }>;
+}
+
+const normalizeGroups = (value: any): BagGroup[] =>
+  Array.isArray(value)
+    ? value
+        .map((group: any) => ({
+          ...group,
+          orders: Array.isArray(group.orders) ? group.orders : [],
+        }))
+        .filter((group: BagGroup) => group.next_hop_id && group.next_hop_type !== 'UNKNOWN' && group.orders.length > 0)
+    : [];
+
 const Bagging = () => {
   const [groups, setGroups] = useState<BagGroup[]>([]);
+  const [bags, setBags] = useState<BagSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const [bagsLoading, setBagsLoading] = useState(false);
   const [creatingFor, setCreatingFor] = useState<string | null>(null); // key of group being bagged
   const [bagResults, setBagResults] = useState<Record<string, string>>({}); // key → bag_code
+
+  const [expandedBag, setExpandedBag] = useState<string | null>(null);
+
+  const copyBagCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      alert(`Da copy ma bao: ${code}`);
+    } catch {
+      const input = document.createElement('input');
+      input.value = code;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      alert(`Da copy ma bao: ${code}`);
+    }
+  };
 
   const fetchSuggestions = async () => {
     try {
       setLoading(true);
       const res: any = await api.get('/stockkeeper/bags/suggestions');
-      setGroups(res.data || []);
+      setGroups(normalizeGroups(res.data));
     } catch (e: any) {
       alert(e.response?.data?.message || e.message);
     } finally {
@@ -37,7 +84,22 @@ const Bagging = () => {
     }
   };
 
-  useEffect(() => { fetchSuggestions(); }, []);
+  const fetchBags = async () => {
+    try {
+      setBagsLoading(true);
+      const res: any = await api.get('/stockkeeper/bags');
+      setBags(Array.isArray(res.data) ? res.data : []);
+    } catch (e: any) {
+      alert(e.response?.data?.message || e.message);
+    } finally {
+      setBagsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSuggestions();
+    fetchBags();
+  }, []);
 
   const handleCreateBag = async (group: BagGroup) => {
     const key = `${group.next_hop_type}_${group.next_hop_id}`;
@@ -51,6 +113,7 @@ const Bagging = () => {
       setBagResults(prev => ({ ...prev, [key]: res.data.bag_code }));
       // Remove this group from list since orders are now bagged
       setGroups(prev => prev.filter(g => `${g.next_hop_type}_${g.next_hop_id}` !== key));
+      fetchBags();
     } catch (e: any) {
       alert(e.response?.data?.message || e.message);
     } finally {
@@ -77,6 +140,9 @@ const Bagging = () => {
             <div className="bag-code-big">{code}</div>
             <span>Dán mã này lên bao vật lý trước khi xuất kho.</span>
           </div>
+          <button className="bag-copy-btn" onClick={() => copyBagCode(code)} title="Copy ma bao">
+            <FiCopy size={18} />
+          </button>
           <button onClick={() => setBagResults(prev => { const next = {...prev}; delete next[key]; return next; })}>✕</button>
         </div>
       ))}
@@ -145,6 +211,62 @@ const Bagging = () => {
             </div>
           );
         })}
+      </div>
+
+      <div className="bags-history">
+        <div className="bags-history-header">
+          <div>
+            <h2>Bao da gom</h2>
+            <p>Quet ma bao o man hinh Xuat Kho de xuat ca bao. Mo bao de xem cac don ben trong.</p>
+          </div>
+          <button className="btn-refresh" onClick={fetchBags} disabled={bagsLoading}>
+            <FiRefreshCw size={16} /> {bagsLoading ? 'Dang tai...' : 'Lam moi'}
+          </button>
+        </div>
+
+        {!bagsLoading && bags.length === 0 && (
+          <div className="bags-history-empty">Chua co bao nao lien quan den kho nay.</div>
+        )}
+
+        <div className="bags-history-list">
+          {bags.map((bag) => {
+            const isOpen = expandedBag === bag.bag_code;
+            const destination = bag.dest_spoke_name || bag.dest_hub_name || 'Chua xac dinh';
+            return (
+              <div key={bag.id_bag} className="bag-history-card">
+                <button className="bag-history-main" onClick={() => setExpandedBag(isOpen ? null : bag.bag_code)}>
+                  <div>
+                    <span className="bag-history-code">{bag.bag_code}</span>
+                    <span className={`bag-status ${bag.status.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>{bag.status}</span>
+                  </div>
+                  <div className="bag-history-route">
+                    <span>{bag.origin_hub_name || 'Kho nguon'}</span>
+                    <FiCornerDownRight size={16} />
+                    <strong>{destination}</strong>
+                  </div>
+                  <div className="bag-history-count">{bag.item_count} don</div>
+                </button>
+                <button className="bag-history-copy" onClick={() => copyBagCode(bag.bag_code)} title="Copy ma bao">
+                  <FiCopy size={16} /> Copy
+                </button>
+
+                {isOpen && (
+                  <div className="bag-history-items">
+                    {bag.items.map((item) => (
+                      <div key={item.id_order} className="bag-history-item">
+                        <FiPackage size={14} />
+                        <span className="bag-order-code">{item.tracking_code}</span>
+                        <span>{item.receiver_name}</span>
+                        <span className="bag-order-dest">{item.district}, {item.province}</span>
+                        <span className="bag-item-status">{item.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

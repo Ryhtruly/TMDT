@@ -146,11 +146,38 @@ export class StockkeeperService {
     const assignment = await this.getAssignment(id_user);
     if (!assignment.id_hub) throw new Error('Gom bao liên Hub chỉ dành cho Hub.');
     const orders = await stockRepo.getOrdersForBagging(assignment.id_hub, null);
-    const hubsResult = await require('../config/db').pool.query('SELECT * FROM hubs WHERE id_hub != $1', [assignment.id_hub]);
-    return hubsResult.rows.map((h: any) => {
-      const matched = orders.filter((o: any) => o.dest_hub_id === h.id_hub && o.next_hop_type === 'HUB');
-      return { id_hub: h.id_hub, name: h.hub_name, orders: matched.length, items: matched.map((o: any) => o.tracking_code) };
-    });
+    const groups = new Map<string, any>();
+
+    for (const order of orders) {
+      if (!order.next_hop_id || order.next_hop_type === 'UNKNOWN') continue;
+      const key = `${order.next_hop_type}_${order.next_hop_id}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          next_hop_type: order.next_hop_type,
+          next_hop_id: Number(order.next_hop_id),
+          next_hop_name: order.next_hop_name,
+          orders: [],
+        });
+      }
+
+      groups.get(key).orders.push({
+        id_order: order.id_order,
+        tracking_code: order.tracking_code,
+        receiver_name: order.receiver_name,
+        province: order.province,
+        district: order.district,
+        last_updated: order.last_updated,
+      });
+    }
+
+    return Array.from(groups.values()).sort((a: any, b: any) =>
+      String(a.next_hop_name || '').localeCompare(String(b.next_hop_name || ''), 'vi')
+    );
+  }
+
+  async getBags(id_user: number) {
+    const assignment = await this.getAssignment(id_user);
+    return await stockRepo.getBagsForWarehouse(assignment.id_hub || null, assignment.id_spoke || null);
   }
 
   async getSpokeSuggestions(id_user: number) {
@@ -173,6 +200,12 @@ export class StockkeeperService {
       await client.query('BEGIN');
       let dest_hub_id = next_hop_type === 'HUB' || !next_hop_type ? dest_id : null;
       let dest_spoke_id = next_hop_type === 'SPOKE' ? dest_id : null;
+
+      if (next_hop_type === 'SPOKE') {
+        const spokeResult = await client.query('SELECT id_hub FROM spokes WHERE id_spoke = $1', [dest_id]);
+        if (!spokeResult.rows[0]?.id_hub) throw new Error('Buu cuc dich khong hop le.');
+        dest_hub_id = Number(spokeResult.rows[0].id_hub);
+      }
       
       const bag_code = await stockRepo.createBag(assignment.id_hub, dest_hub_id, order_ids, client, dest_spoke_id);
       await client.query('COMMIT');

@@ -98,7 +98,7 @@ export const confirmDelivered = async (req: AuthRequest, res: Response): Promise
 
 export const reportFailed = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { tracking_code, reason_fail, evidence_url } = req.body;
+    const { tracking_code, reason_fail, reason_code, evidence_url } = req.body;
     if (!tracking_code || !reason_fail) {
       res.status(400).json({ status: 'error', message: 'Can cung cap tracking_code va reason_fail.' });
       return;
@@ -107,14 +107,19 @@ export const reportFailed = async (req: AuthRequest, res: Response): Promise<voi
       req.user.id_user,
       String(tracking_code).toUpperCase(),
       reason_fail,
-      evidence_url
+      evidence_url,
+      reason_code
     );
     res.json({
       status: 'success',
       tracking_code: data.tracking_code,
       new_status: data.status,
       attempt_no: data.attempt_no,
+      reason_code: data.reason_code,
       redelivery_fee_charged: data.redelivery_fee_charged,
+      return_fee_charged: data.return_fee_charged,
+      return_formula: data.return_formula,
+      failure_action: data.failure_action,
       message: data.message,
     });
   } catch (error: any) {

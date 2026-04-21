@@ -2,6 +2,7 @@ import { OrderRepository } from '../repositories/order.repository';
 import { ShopRepository } from '../repositories/shop.repository';
 import { getRegionByProvince, normalizeProvinceName } from '../utils/location';
 import { assertValidVietnamPhone } from '../utils/phone';
+import { assertWalletNotDebtLocked, calcWalletAvailable } from '../utils/walletDebt';
 
 const orderRepo = new OrderRepository();
 const shopRepo = new ShopRepository();
@@ -63,11 +64,11 @@ const resolvePricingRouteType = (originArea: any, destArea: any): PricingRouteTy
 const mapPricingRouteTypeForDb = (routeType: PricingRouteType) => {
   switch (routeType) {
     case 'Noi tinh':
-      return 'Nội tỉnh';
+      return 'N\u1ed9i t\u1ec9nh';
     case 'Lien vung':
-      return 'Liên Vùng';
+      return 'Li\u00ean V\u00f9ng';
     default:
-      return 'Xuyên Miền';
+      return 'Xuy\u00ean Mi\u1ec1n';
   }
 };
 
@@ -282,12 +283,12 @@ export class OrderService {
     try {
       await client.query('BEGIN');
 
-      let walletAvailable = 0;
-      if (normalizedPayerType === 'SENDER' && normalizedFeePaymentMethod === 'WALLET') {
-        const wallet = await orderRepo.findWalletForUpdate(idUser, client);
-        if (!wallet) throw new Error('Vi tien khong ton tai. Vui long lien he admin.');
+      const wallet = await orderRepo.findWalletForUpdate(idUser, client);
+      if (!wallet) throw new Error('Vi tien khong ton tai. Vui long lien he admin.');
+      assertWalletNotDebtLocked(wallet);
 
-        walletAvailable = Number(wallet.balance) + Number(wallet.credit_limit) - Number(wallet.used_credit);
+      let walletAvailable = calcWalletAvailable(wallet);
+      if (normalizedPayerType === 'SENDER' && normalizedFeePaymentMethod === 'WALLET') {
         if (walletAvailable < totalFee) {
           throw new Error(
             `So du vi khong du.\n` +
@@ -301,8 +302,7 @@ export class OrderService {
 
         await orderRepo.deductWalletAndLog(wallet.id_wallet, totalFee, 'PHI VAN CHUYEN DON', client);
       } else {
-        const wallet = await shopRepo.getWalletByUserId(idUser);
-        walletAvailable = wallet ? Number(wallet.balance) + Number(wallet.credit_limit) - Number(wallet.used_credit) : 0;
+        walletAvailable = calcWalletAvailable(wallet);
       }
 
       const trackingCode = generateTrackingCode();

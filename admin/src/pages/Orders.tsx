@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FiSearch, FiFilter, FiX, FiPackage, FiMapPin, FiClock, FiUser, FiPhone, FiTruck, FiDollarSign } from 'react-icons/fi';
+import { FiSearch, FiFilter, FiX, FiPackage, FiMapPin, FiClock, FiUser, FiPhone, FiTruck } from 'react-icons/fi';
 import apiClient from '../api/client';
 
 const STATUS_OPTIONS = ['', 'CHỜ LẤY HÀNG', 'ĐANG LẤY', 'ĐANG GIAO', 'GIAO THÀNH CÔNG', 'GIAO THẤT BẠI', 'HOÀN HÀNG', 'ĐÃ HỦY'];
@@ -25,7 +25,9 @@ const OrderDetailModal = ({ trackingCode, onClose }: { trackingCode: string; onC
 
   useEffect(() => {
     apiClient.get(`/admin/orders/${trackingCode}/detail`).then((res: any) => {
-      setDetail(res?.data || null);
+      const payload = res?.data || null;
+      const order = payload?.order || payload;
+      setDetail(order ? { ...order, logs: payload?.timeline || payload?.logs || [] } : null);
     }).catch((err: any) => {
       setError(err?.response?.data?.message || 'Không tải được chi tiết đơn.');
     }).finally(() => setLoading(false));
@@ -84,7 +86,7 @@ const OrderDetailModal = ({ trackingCode, onClose }: { trackingCode: string; onC
                 </div>
                 <p style={{ fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>{detail.receiver_name}</p>
                 <p style={{ fontSize: '0.85rem', color: '#64748b' }}><FiPhone size={11} style={{ marginRight: 4 }} />{detail.receiver_phone}</p>
-                <p style={{ fontSize: '0.85rem', color: '#64748b' }}><FiMapPin size={11} style={{ marginRight: 4 }} />{detail.receiver_address}, {detail.receiver_district}, {detail.receiver_province}</p>
+                <p style={{ fontSize: '0.85rem', color: '#64748b' }}><FiMapPin size={11} style={{ marginRight: 4 }} />{detail.receiver_address}{detail.district ? `, ${detail.district}` : ''}{detail.province ? `, ${detail.province}` : ''}</p>
               </div>
             </div>
 
@@ -100,7 +102,7 @@ const OrderDetailModal = ({ trackingCode, onClose }: { trackingCode: string; onC
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>KHỐI LƯỢNG</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }}>{detail.weight_g ? `${(detail.weight_g / 1000).toFixed(2)} kg` : '—'}</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }}>{detail.weight || detail.weight_g ? `${((detail.weight_g || detail.weight) / 1000).toFixed(2)} kg` : '—'}</div>
               </div>
               {detail.service_name && <div>
                 <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>DỊCH VỤ</div>

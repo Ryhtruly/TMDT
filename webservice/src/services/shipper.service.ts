@@ -5,6 +5,27 @@ const shipperRepo = new ShipperRepository();
 const FREE_DELIVERY_LIMIT = 3;
 const REDELIVERY_FEE = 11000;
 
+const REDELIVERY_REASON_CODES = new Set([
+  'CUSTOMER_UNREACHABLE',
+  'CUSTOMER_NOT_HOME',
+  'RESCHEDULE_REQUEST',
+  'TEMPORARY_ISSUE',
+]);
+
+const RETURN_REASON_CODES = new Set([
+  'CUSTOMER_REJECTED',
+  'INVALID_ADDRESS',
+  'NON_EXISTENT_RECEIVER',
+]);
+
+const normalizeText = (value: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\u0111/g, 'd')
+    .replace(/\u0110/g, 'D')
+    .toLowerCase();
+
 export class ShipperService {
   private async getEmployeeId(id_user: number) {
     const emp = await shipperRepo.findEmployeeByUserId(id_user);
@@ -19,6 +40,31 @@ export class ShipperService {
       throw new Error('Ban chua duoc phan cong khu vuc giao hang. Lien he admin.');
     }
     return assignment;
+  }
+
+  private normalizeDeliveryFailReasonCode(reason_fail: string, reason_code?: string) {
+    const code = String(reason_code || '').trim().toUpperCase();
+    if (REDELIVERY_REASON_CODES.has(code) || RETURN_REASON_CODES.has(code)) return code;
+
+    const text = normalizeText(reason_fail);
+    if (text.includes('tu choi')) return 'CUSTOMER_REJECTED';
+    if (text.includes('khong ton tai')) return 'NON_EXISTENT_RECEIVER';
+    if (text.includes('sai dia chi')) return 'INVALID_ADDRESS';
+    if (text.includes('vang nha')) return 'CUSTOMER_NOT_HOME';
+    if (text.includes('hen giao lai')) return 'RESCHEDULE_REQUEST';
+    if (text.includes('khong nghe') || text.includes('khong lien lac')) return 'CUSTOMER_UNREACHABLE';
+    return 'TEMPORARY_ISSUE';
+  }
+
+  private buildReturnFee(order: any) {
+    const shippingFee = Number(order.shipping_fee || 0);
+    const isHeavy = Number(order.weight || 0) >= 20000;
+    return {
+      returnFee: Math.round(shippingFee * (isHeavy ? 1 : 0.5)),
+      formula: isHeavy
+        ? `Hang nang: 100% x ${shippingFee.toLocaleString('vi-VN')}d`
+        : `Hang nhe: 50% x ${shippingFee.toLocaleString('vi-VN')}d`,
+    };
   }
 
   async getPickupList(id_user: number) {
@@ -258,6 +304,7 @@ export class ShipperService {
         id_user,
         'THÀNH CÔNG',
         null,
+        null,
         evidence_url || null,
         client
       );
@@ -296,7 +343,7 @@ export class ShipperService {
     }
   }
 
-  async reportFailedDelivery(id_user: number, tracking_code: string, reason_fail: string, evidence_url?: string) {
+  async reportFailedDelivery(id_user: number, tracking_code: string, reason_fail: string, evidence_url?: string, reason_code?: string) {
     if (!reason_fail) throw new Error('Bat buoc nhap ly do giao hang that bai.');
 
     const assignment = await this.getSpokeAssignment(id_user);
@@ -317,6 +364,8 @@ export class ShipperService {
 
       const attemptCount = await shipperRepo.countDeliveryAttempts(order.id_order);
       const newAttemptNo = attemptCount + 1;
+      const normalizedReasonCode = this.normalizeDeliveryFailReasonCode(reason_fail, reason_code);
+      const mustReturn = RETURN_REASON_CODES.has(normalizedReasonCode);
       const isChargeable = newAttemptNo > FREE_DELIVERY_LIMIT;
 
       await shipperRepo.insertDeliveryAttempt(
@@ -325,25 +374,40 @@ export class ShipperService {
         id_user,
         'THẤT BẠI',
         reason_fail,
+        normalizedReasonCode,
         evidence_url || null,
         client
       );
 
       let redeliveryFeeCharged = 0;
-      if (isChargeable) {
+      let returnFeeCharged = 0;
+      let returnFormula = '';
+      if (mustReturn) {
+        const shopWallet = await shipperRepo.findWalletByShopOrder(order.id_order, client);
+        if (!shopWallet) throw new Error('Khong tim thay vi shop de tinh phi hoan hang.');
+        const { returnFee, formula } = this.buildReturnFee(order);
+        returnFeeCharged = returnFee;
+        returnFormula = formula;
+        if (returnFee > 0) {
+          await shipperRepo.chargeRedeliveryFee(shopWallet.id_wallet, returnFee, client, `PHI HOAN HANG ${tracking_code}`);
+        }
+        await shipperRepo.markOrderReturn(order.id_order, returnFee, client);
+      } else if (isChargeable) {
         const shopWallet = await shipperRepo.findWalletByShopOrder(order.id_order, client);
         if (shopWallet) {
-          redeliveryFeeCharged = await shipperRepo.chargeRedeliveryFee(shopWallet.id_wallet, client);
+          redeliveryFeeCharged = await shipperRepo.chargeRedeliveryFee(shopWallet.id_wallet, REDELIVERY_FEE, client);
         }
       }
 
-      await shipperRepo.updateOrderStatus(order.id_order, 'GIAO THẤT BẠI', client);
-      await shipperRepo.updateCurrentShipper(order.id_order, null, client);
+      if (!mustReturn) {
+        await shipperRepo.updateOrderStatus(order.id_order, 'GIAO THẤT BẠI', client);
+        await shipperRepo.updateCurrentShipper(order.id_order, null, client);
+      }
       await shipperRepo.insertOrderLog(
         order.id_order,
         idLocation,
         id_user,
-        `GIAO THAT BAI LAN ${newAttemptNo}`,
+        mustReturn ? `GIAO THAT BAI LAN ${newAttemptNo} - TU DONG HOAN HANG` : `GIAO THAT BAI LAN ${newAttemptNo}`,
         evidence_url || null,
         client
       );
@@ -352,10 +416,16 @@ export class ShipperService {
 
       return {
         tracking_code,
-        status: 'GIAO THẤT BẠI',
+        status: mustReturn ? 'HOÀN HÀNG' : 'GIAO THẤT BẠI',
         attempt_no: newAttemptNo,
+        reason_code: normalizedReasonCode,
         redelivery_fee_charged: redeliveryFeeCharged,
-        message: isChargeable
+        return_fee_charged: returnFeeCharged,
+        return_formula: returnFormula,
+        failure_action: mustReturn ? 'RETURN_REQUIRED' : 'REDELIVERY_ELIGIBLE',
+        message: mustReturn
+          ? `Ly do nay bat buoc hoan hang. Da tru phi hoan ${returnFeeCharged.toLocaleString()}d (${returnFormula}).`
+          : isChargeable
           ? `Ghi nhan giao that bai lan ${newAttemptNo}. Da tru ${REDELIVERY_FEE.toLocaleString()}d phi giao lai vao vi shop.`
           : `Ghi nhan giao that bai lan ${newAttemptNo}.`,
       };

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  FiEdit2,
   FiKey,
   FiMapPin,
   FiSearch,
@@ -24,8 +25,8 @@ const stripVietnamese = (value: string) =>
   (value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D');
+    .replace(/\u0111/g, 'd')
+    .replace(/\u0110/g, 'D');
 
 const normalizeProvinceName = (value: string) => {
   const normalized = stripVietnamese(value)
@@ -63,6 +64,16 @@ const normalizeDistrictName = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const emptyEditForm = {
+  phone: '',
+  email: '',
+  full_name: '',
+  citizen_id: '',
+  gender: 'Nam',
+  dob: '',
+  home_address: '',
+};
+
 const Employees = () => {
   const [employees, setEmployees] = useState<any[]>([]);
   const [filtered, setFiltered] = useState<any[]>([]);
@@ -75,11 +86,17 @@ const Employees = () => {
   const [districtOptions, setDistrictOptions] = useState<any[]>([]);
   const [wardOptions, setWardOptions] = useState<any[]>([]);
   const [shipperSearchText, setShipperSearchText] = useState('');
+  const [zoneSearchText, setZoneSearchText] = useState('');
+  const [zoneProvinceFilter, setZoneProvinceFilter] = useState('ALL');
   const [searchText, setSearchText] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [listLoading, setListLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'list' | 'create' | 'zones'>('list');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+  const [editFormData, setEditFormData] = useState(emptyEditForm);
+  const [editLoading, setEditLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     phone: '',
@@ -114,7 +131,10 @@ const Employees = () => {
   const isSpokeDisabled = selectedRoleName === 'ADMIN' || (selectedRoleName === 'STOCKKEEPER' && formData.id_hub !== '');
 
   const shippers = employees.filter((employee) => (employee.roles || []).includes('SHIPPER'));
+  const selectedZoneShipper = shippers.find((employee) => String(employee.id_user) === String(zoneForm.id_shipper));
+  const isZoneSpokeLocked = Boolean(selectedZoneShipper?.id_spoke);
   const selectedZoneSpokeId = zoneForm.id_spoke ? parseInt(zoneForm.id_spoke, 10) : null;
+  const selectedZoneSpoke = spokes.find((spoke) => String(spoke.id_spoke) === String(zoneForm.id_spoke));
   const spokeAreas = selectedZoneSpokeId ? areas.filter((area) => area.id_spoke === selectedZoneSpokeId) : [];
   const provinceOptions = Array.from(new Set(spokeAreas.map((area) => area.province))).sort();
   const fixedProvince = provinceOptions.length === 1 ? provinceOptions[0] : '';
@@ -123,7 +143,16 @@ const Employees = () => {
     ? spokeAreas.filter((area) => normalizeProvinceName(area.province) === normalizeProvinceName(effectiveProvince))
     : spokeAreas;
   const districtOptionsBySpoke = Array.from(new Set(selectedProvinceCoverage.map((area) => area.district))).sort();
-  const fixedDistrict = districtOptionsBySpoke.length === 1 ? districtOptionsBySpoke[0] : '';
+  const selectedSpokeName = normalizeDistrictName(selectedZoneSpoke?.spoke_name || '');
+  const districtMatchedBySpokeName = districtOptionsBySpoke.find((district) => {
+    const districtName = normalizeDistrictName(district);
+    if (!districtName) return false;
+    if (districtName.length <= 2) {
+      return new RegExp(`(^|\\s)${districtName}(\\s|$)`).test(selectedSpokeName);
+    }
+    return selectedSpokeName.includes(districtName);
+  });
+  const fixedDistrict = districtMatchedBySpokeName || (districtOptionsBySpoke.length === 1 ? districtOptionsBySpoke[0] : '');
   const effectiveDistrict = fixedDistrict || zoneForm.district;
   const shipperOptions = selectedZoneSpokeId
     ? shippers.filter((employee) => String(employee.id_spoke || '') === String(selectedZoneSpokeId))
@@ -142,6 +171,37 @@ const Employees = () => {
     if (!q) return true;
     return ward.name?.toLowerCase().includes(q);
   });
+  const zoneProvinceOptions = Array.from(new Set(wardAssignments.map((item) => item.province).filter(Boolean))).sort();
+  const normalizedZoneSearch = stripVietnamese(zoneSearchText).toLowerCase().trim();
+  const visibleWardAssignments = wardAssignments.filter((item) => {
+    const matchesProvince =
+      zoneProvinceFilter === 'ALL' ||
+      normalizeProvinceName(item.province || '') === normalizeProvinceName(zoneProvinceFilter);
+    if (!matchesProvince) return false;
+    if (!normalizedZoneSearch) return true;
+    const haystack = stripVietnamese([
+      item.shipper_name,
+      item.shipper_phone,
+      item.spoke_name,
+      item.province,
+      item.district,
+      item.ward,
+    ].filter(Boolean).join(' ')).toLowerCase();
+    return haystack.includes(normalizedZoneSearch);
+  });
+
+  const handleZoneShipperChange = (id_shipper: string) => {
+    const nextShipper = shippers.find((employee) => String(employee.id_user) === String(id_shipper));
+    const nextSpokeId = nextShipper?.id_spoke ? String(nextShipper.id_spoke) : zoneForm.id_spoke;
+    setZoneForm({
+      ...zoneForm,
+      id_shipper,
+      id_spoke: nextSpokeId,
+      province: '',
+      district: '',
+      ward: '',
+    });
+  };
 
   useEffect(() => {
     fetchEmployees();
@@ -166,7 +226,18 @@ const Employees = () => {
 
   useEffect(() => {
     if (!zoneForm.id_spoke) return;
-    setZoneForm((prev) => ({ ...prev, id_shipper: '', province: '', district: '', ward: '' }));
+    setZoneForm((prev) => {
+      const selectedShipper = shippers.find((employee) => String(employee.id_user) === String(prev.id_shipper));
+      const keepSelectedShipper =
+        selectedShipper?.id_spoke && String(selectedShipper.id_spoke) === String(prev.id_spoke);
+      return {
+        ...prev,
+        id_shipper: keepSelectedShipper ? prev.id_shipper : '',
+        province: '',
+        district: '',
+        ward: '',
+      };
+    });
     setShipperSearchText('');
     setDistrictOptions([]);
     setWardOptions([]);
@@ -267,6 +338,52 @@ const Employees = () => {
       setWardAssignments(res.data || []);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const openEditEmployee = (employee: any) => {
+    setEditingEmployee(employee);
+    setEditFormData({
+      phone: employee.phone || '',
+      email: employee.email || '',
+      full_name: employee.full_name || '',
+      citizen_id: employee.citizen_id || '',
+      gender: employee.gender || 'Nam',
+      dob: employee.dob ? String(employee.dob).slice(0, 10) : '',
+      home_address: employee.home_address || '',
+    });
+    setIsEditDrawerOpen(true);
+  };
+
+  const closeEditDrawer = () => {
+    setIsEditDrawerOpen(false);
+    setEditingEmployee(null);
+    setEditFormData(emptyEditForm);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEmployee) return;
+
+    const normalizedPhone = normalizeVietnamPhone(editFormData.phone);
+    if (!isValidVietnamPhone(normalizedPhone)) {
+      alert(vietnamPhoneError);
+      return;
+    }
+
+    setEditLoading(true);
+    try {
+      await apiClient.put(`/admin/employees/${editingEmployee.id_user}`, {
+        ...editFormData,
+        phone: normalizedPhone,
+      });
+      await fetchEmployees();
+      closeEditDrawer();
+      alert('Da cap nhat thong tin nhan vien.');
+    } catch (err: any) {
+      alert('Loi: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -521,6 +638,14 @@ const Employees = () => {
                           </span>
                         </td>
                         <td className="text-right">
+                          <button
+                            className="action-btn"
+                            style={{ color: '#2563eb' }}
+                            title="Sua thong tin"
+                            onClick={() => openEditEmployee(emp)}
+                          >
+                            <FiEdit2 />
+                          </button>
                           {emp.is_active && (
                             <button
                               className="action-btn"
@@ -659,18 +784,6 @@ const Employees = () => {
               </p>
               <form onSubmit={handleZoneSubmit} style={{ display: 'grid', gap: '14px' }}>
                 <div className="form-group">
-                  <label>Spoke</label>
-                  <select className="form-control" required value={zoneForm.id_spoke} onChange={(e) => setZoneForm({ ...zoneForm, id_spoke: e.target.value })}>
-                    <option value="">-- Chon spoke --</option>
-                    {spokes.map((spoke) => (
-                      <option key={spoke.id_spoke} value={spoke.id_spoke}>
-                        {spoke.spoke_name} ({spoke.hub_name})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
                   <label>Shipper</label>
                   <input
                     className="form-control"
@@ -678,26 +791,48 @@ const Employees = () => {
                     placeholder="Tim shipper theo ten, SDT, email..."
                     value={shipperSearchText}
                     onChange={(e) => setShipperSearchText(e.target.value)}
-                    disabled={!zoneForm.id_spoke}
                     style={{ marginBottom: '8px' }}
                   />
                   <select
                     className="form-control"
                     required
                     value={zoneForm.id_shipper}
-                    onChange={(e) => setZoneForm({ ...zoneForm, id_shipper: e.target.value })}
-                    disabled={!zoneForm.id_spoke}
+                    onChange={(e) => handleZoneShipperChange(e.target.value)}
                   >
-                    <option value="">-- Chon shipper trong spoke --</option>
+                    <option value="">-- Chon shipper --</option>
                     {visibleShipperOptions.map((shipper) => (
                       <option key={shipper.id_user} value={shipper.id_user}>
                         {shipper.full_name} - {shipper.phone}
+                        {shipper.spoke_name ? ` (${shipper.spoke_name})` : ''}
                       </option>
                     ))}
                   </select>
-                  {zoneForm.id_spoke && visibleShipperOptions.length === 0 && (
+                  {visibleShipperOptions.length === 0 && (
                     <div style={{ color: '#b45309', fontSize: '0.8rem', marginTop: '6px' }}>
-                      Không tìm thấy shipper nào đang được phân công vào chi nhánh tiếp nhận này.
+                      Khong tim thay shipper phu hop.
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label>Spoke</label>
+                  <select
+                    className="form-control"
+                    required
+                    value={zoneForm.id_spoke}
+                    onChange={(e) => setZoneForm({ ...zoneForm, id_spoke: e.target.value })}
+                    disabled={isZoneSpokeLocked}
+                  >
+                    <option value="">-- Tu dong theo shipper neu co spoke --</option>
+                    {spokes.map((spoke) => (
+                      <option key={spoke.id_spoke} value={spoke.id_spoke}>
+                        {spoke.spoke_name} ({spoke.hub_name})
+                      </option>
+                    ))}
+                  </select>
+                  {isZoneSpokeLocked && (
+                    <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '6px' }}>
+                      Spoke da duoc khoa theo shipper dang chon.
                     </div>
                   )}
                 </div>
@@ -736,7 +871,7 @@ const Employees = () => {
 
                 <div className="form-group">
                   <label>Quan / Huyen</label>
-                  {districtOptionsBySpoke.length <= 1 ? (
+                  {fixedDistrict ? (
                     <input
                       className="form-control"
                       value={effectiveDistrict}
@@ -825,6 +960,32 @@ const Employees = () => {
             </div>
 
             <div className="table-container">
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '16px', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', minWidth: '260px', flex: '1 1 320px' }}>
+                  <FiSearch style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <input
+                    className="form-control"
+                    style={{ paddingLeft: '38px' }}
+                    placeholder="Tim theo shipper, SDT, spoke, phuong..."
+                    value={zoneSearchText}
+                    onChange={(e) => setZoneSearchText(e.target.value)}
+                  />
+                </div>
+                <select
+                  className="form-control"
+                  style={{ width: '220px' }}
+                  value={zoneProvinceFilter}
+                  onChange={(e) => setZoneProvinceFilter(e.target.value)}
+                >
+                  <option value="ALL">Tat ca tinh/thanh</option>
+                  {zoneProvinceOptions.map((province) => (
+                    <option key={province} value={province}>{province}</option>
+                  ))}
+                </select>
+                <div style={{ color: '#64748b', fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
+                  Hien thi {visibleWardAssignments.length}/{wardAssignments.length}
+                </div>
+              </div>
               <table className="admin-table">
                 <thead>
                   <tr>
@@ -837,7 +998,7 @@ const Employees = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {wardAssignments.map((item) => (
+                  {visibleWardAssignments.map((item) => (
                     <tr key={item.id_assignment}>
                       <td><span className="badge-id">ZONE-{item.id_assignment}</span></td>
                       <td>
@@ -856,13 +1017,106 @@ const Employees = () => {
                       </td>
                     </tr>
                   ))}
-                  {wardAssignments.length === 0 && <tr><td colSpan={6} className="empty-state">Chua co phan khu shipper nao.</td></tr>}
+                  {visibleWardAssignments.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="empty-state">
+                        {wardAssignments.length === 0 ? 'Chua co phan khu shipper nao.' : 'Khong co phan khu phu hop bo loc.'}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         )}
       </div>
+
+      <Drawer isOpen={isEditDrawerOpen} onClose={closeEditDrawer} title="Sua thong tin nhan vien">
+        {editingEmployee && (
+          <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ backgroundColor: '#f3f4f6', padding: '12px', borderRadius: '8px', color: '#4b5563', fontSize: '0.9rem' }}>
+              Cap nhat thong tin ca nhan va SDT dang nhap cho User-{editingEmployee.id_user}.
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Ho va Ten</label>
+              <input
+                required
+                className="form-control"
+                value={editFormData.full_name}
+                onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>SDT dang nhap</label>
+              <input
+                required
+                className="form-control"
+                value={editFormData.phone}
+                onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                placeholder="0912345678 hoac +84912345678"
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Email</label>
+              <input
+                required
+                type="email"
+                className="form-control"
+                value={editFormData.email}
+                onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>CCCD</label>
+              <input
+                required
+                className="form-control"
+                value={editFormData.citizen_id}
+                onChange={(e) => setEditFormData({ ...editFormData, citizen_id: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Gioi tinh</label>
+              <select
+                className="form-control"
+                value={editFormData.gender}
+                onChange={(e) => setEditFormData({ ...editFormData, gender: e.target.value })}
+              >
+                <option>Nam</option>
+                <option>Nu</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Ngay sinh</label>
+              <input
+                type="date"
+                className="form-control"
+                value={editFormData.dob}
+                onChange={(e) => setEditFormData({ ...editFormData, dob: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Dia chi nha</label>
+              <input
+                className="form-control"
+                value={editFormData.home_address}
+                onChange={(e) => setEditFormData({ ...editFormData, home_address: e.target.value })}
+              />
+            </div>
+
+            <button type="submit" className="btn-primary" disabled={editLoading}>
+              {editLoading ? 'Dang cap nhat...' : 'Luu thay doi'}
+            </button>
+          </form>
+        )}
+      </Drawer>
 
       <Drawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} title="Quan tri quyen">
         <div style={{ backgroundColor: '#f3f4f6', padding: '15px', borderRadius: '8px', color: '#4b5563', fontSize: '0.9rem', marginBottom: '20px' }}>

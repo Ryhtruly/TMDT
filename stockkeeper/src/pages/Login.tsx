@@ -37,7 +37,7 @@ const Login = () => {
           return;
         }
 
-        login(response.accessToken, response.user_info);
+        login(response.accessToken || response.token, response.user_info);
         navigate('/');
       } else {
         setError('Thông tin đăng nhập không hợp lệ');

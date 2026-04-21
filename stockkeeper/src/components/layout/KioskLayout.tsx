@@ -5,9 +5,10 @@ import { FiLogOut, FiBox, FiUpload, FiDownload, FiLayers } from 'react-icons/fi'
 import './KioskLayout.css';
 
 const KioskLayout = () => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const navigate = useNavigate();
 
+  if (loading) return <div>Dang tai thong tin xac thuc...</div>;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
   const handleLogout = () => {

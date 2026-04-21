@@ -7,8 +7,10 @@ export interface UserInfo {
   display_name: string;
 }
 
-const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 phút
+const IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000; // match JWT lifetime
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+const TOKEN_KEY = 'stockkeeper_token';
+const USER_KEY = 'stockkeeper_user';
 
 export const useAuth = () => {
   const [user, setUser] = useState<UserInfo | null>(null);
@@ -16,8 +18,10 @@ export const useAuth = () => {
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearSession = useCallback(() => {
-    sessionStorage.removeItem('stockkeeper_token');
-    sessionStorage.removeItem('stockkeeper_user');
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
     setUser(null);
     window.location.href = '/login';
   }, []);
@@ -29,14 +33,17 @@ export const useAuth = () => {
     }, IDLE_TIMEOUT_MS);
   }, [clearSession]);
 
-  // Bootstrap auth check từ sessionStorage (tự xóa khi đóng tab/trình duyệt)
+  // Bootstrap auth check from localStorage, fallback sessionStorage for older sessions.
   useEffect(() => {
-    const token = sessionStorage.getItem('stockkeeper_token');
-    const savedUser = sessionStorage.getItem('stockkeeper_user');
+    const token = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+    const savedUser = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
 
     if (token && savedUser) {
       try {
-        setUser(JSON.parse(savedUser));
+        const parsedUser = JSON.parse(savedUser);
+        localStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem(USER_KEY, JSON.stringify(parsedUser));
+        setUser(parsedUser);
       } catch (e) {
         setUser(null);
       }
@@ -59,15 +66,19 @@ export const useAuth = () => {
   }, [user, resetIdleTimer]);
 
   const login = (token: string, userInfo: UserInfo) => {
-    sessionStorage.setItem('stockkeeper_token', token);
-    sessionStorage.setItem('stockkeeper_user', JSON.stringify(userInfo));
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(userInfo));
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
     setUser(userInfo);
   };
 
   const logout = () => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
-    sessionStorage.removeItem('stockkeeper_token');
-    sessionStorage.removeItem('stockkeeper_user');
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
     setUser(null);
     window.location.href = '/login';
   };

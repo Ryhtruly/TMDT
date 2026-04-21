@@ -7,9 +7,9 @@ const apiClient = axios.create({
   }
 });
 
-// Đọc token từ sessionStorage thay vì localStorage
+// Read persistent token first, fallback to older sessionStorage sessions.
 apiClient.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem('stockkeeper_token');
+  const token = localStorage.getItem('stockkeeper_token') || sessionStorage.getItem('stockkeeper_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -23,8 +23,10 @@ apiClient.interceptors.response.use((response) => {
   return response.data;
 }, (error) => {
   if (error.response && error.response.status === 401) {
+    localStorage.removeItem('stockkeeper_token');
+    localStorage.removeItem('stockkeeper_user');
     sessionStorage.removeItem('stockkeeper_token');
-    sessionStorage.removeItem('admin_user');
+    sessionStorage.removeItem('stockkeeper_user');
     window.location.href = '/login';
   }
   return Promise.reject(error);

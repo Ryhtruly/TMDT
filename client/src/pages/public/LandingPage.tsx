@@ -84,7 +84,7 @@ const LandingPage = () => {
                     <div key={idx} className="timeline-item">
                       <div className="timeline-dot"></div>
                       <div className="timeline-content">
-                        <strong>{log.action}</strong> tại {log.location_name}
+                        <strong>{log.action}</strong>{log.location_name ? <> tại {log.location_name}</> : null}
                         <div className="timeline-time">{new Date(log.created_at).toLocaleString('vi-VN')}</div>
                       </div>
                     </div>

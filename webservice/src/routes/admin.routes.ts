@@ -5,7 +5,7 @@ import {
   createHub, updateHub, deleteHub,
   createSpoke, updateSpoke, deleteSpoke, setAreaCoverage,
   configPricing, getAllRoles, grantRole, revokeRole, setInsuranceConfig,
-  getEmployees, deactivateEmployee, getAllShops, getAllOrders, getAllBags,
+  getEmployees, updateEmployee, deactivateEmployee, getAllShops, getAllOrders, getAllBags,
   getPricingRules, getServiceTypes, updateServiceType, getShipperWardAssignments,
   createShipperWardAssignment, deleteShipperWardAssignment, autoGenerateRoute,
   getOrderDetailByTracking, toggleRoute
@@ -61,6 +61,7 @@ router.delete('/user-roles', revokeRole);
 
 // Nhân viên (Employees)
 router.get('/employees', getEmployees);
+router.put('/employees/:id', updateEmployee);
 router.put('/employees/:id/deactivate', deactivateEmployee);
 
 // Đối tác (Shops)

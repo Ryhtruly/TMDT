@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FiX, FiSearch, FiPrinter, FiXCircle } from 'react-icons/fi';
+import { FiX, FiSearch, FiPrinter, FiXCircle, FiRefreshCcw } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/client';
 import './Orders.css';
@@ -32,6 +32,7 @@ const Orders = () => {
 
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [returnLoading, setReturnLoading] = useState(false);
 
   const handleCancelOrder = async (id: number) => {
     if (!window.confirm('Xác nhận Hủy Đơn Hàng này? Tiền ship (nếu có) sẽ hoàn Ví.')) return;
@@ -42,6 +43,34 @@ const Orders = () => {
       fetchOrders(filter);
     } catch (err: any) {
       alert(err.response?.data?.message || 'Lỗi: Đã Lấy Hàng không thể hủy.');
+    }
+  };
+
+  const handleReturnOrder = async (order: any) => {
+    if (!order?.id_order) return;
+    setReturnLoading(true);
+    try {
+      const quoteRes: any = await apiClient.get(`/orders/${order.id_order}/return-quote`);
+      const quote = quoteRes?.data || {};
+      const fee = Number(quote.return_fee || 0);
+      const ok = window.confirm(
+        `Yeu cau hoan hang don ${order.tracking_code}?\n\n` +
+        `Phi hoan hang: ${fee.toLocaleString('vi-VN')}d\n` +
+        `Cong thuc: ${quote.formula || '-'}\n` +
+        `So du kha dung: ${Number(quote.wallet_available || 0).toLocaleString('vi-VN')}d\n\n` +
+        'Phi se duoc tru vao vi/hang muc cua shop. Don se quay ve shop gui.'
+      );
+      if (!ok) return;
+
+      const res: any = await apiClient.post(`/orders/${order.id_order}/return`);
+      alert(res?.message || 'Da gui yeu cau hoan hang.');
+      setSelectedOrder(null);
+      window.dispatchEvent(new Event('wallet_updated'));
+      fetchOrders(filter);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Khong the yeu cau hoan hang.');
+    } finally {
+      setReturnLoading(false);
     }
   };
 
@@ -59,6 +88,7 @@ const Orders = () => {
      (o.receiver_phone || '').includes(searchTerm) ||
      (o.receiver_name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+  const canRequestReturn = (order: any) => ['GIAO THẤT BẠI', 'TẠI KHO'].includes(order?.status) && !order?.is_return;
 
   return (
     <div className="orders-page">
@@ -88,6 +118,8 @@ const Orders = () => {
           { label: 'Chờ bàn giao', value: 'CHỜ LẤY HÀNG' },
           { label: 'Đang lưu kho', value: 'ĐÃ LẤY HÀNG' },
           { label: 'Đang giao', value: 'ĐANG GIAO' },
+          { label: 'Giao thất bại', value: 'GIAO THẤT BẠI' },
+          { label: 'Hoàn hàng', value: 'HOÀN HÀNG' },
           { label: 'Hoàn tất', value: 'GIAO THÀNH CÔNG' },
           { label: 'Đơn hủy', value: 'ĐÃ HỦY' }
         ].map((tab) => (
@@ -193,6 +225,16 @@ const Orders = () => {
                 {selectedOrder.status === 'CHỜ LẤY HÀNG' && (
                   <button onClick={() => handleCancelOrder(selectedOrder.id_order)} className="btn-outline" style={{width: '100%', borderColor: 'red', color: 'red', marginTop: '40px'}}>
                      <FiXCircle /> Hủy / Báo Hỏng Đơn Này
+                  </button>
+                )}
+                {canRequestReturn(selectedOrder) && (
+                  <button
+                    onClick={() => handleReturnOrder(selectedOrder)}
+                    className="btn-outline"
+                    disabled={returnLoading}
+                    style={{width: '100%', borderColor: '#f97316', color: '#c2410c', marginTop: '16px'}}
+                  >
+                     <FiRefreshCcw /> {returnLoading ? 'Dang xu ly...' : 'Yeu cau hoan hang'}
                   </button>
                 )}
              </div>
