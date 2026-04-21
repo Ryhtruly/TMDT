@@ -5,6 +5,7 @@ import {
   isSameArea,
   isSameWardArea,
 } from '../utils/location';
+import { deductWalletAndLog as deductWalletById, getSyncedWalletByUserId } from '../utils/walletDebt';
 
 export class ShipperRepository {
   async getShipperAssignment(id_employee: number) {
@@ -266,15 +267,16 @@ export class ShipperRepository {
     id_shipper: number,
     result_val: string,
     reason_fail: string | null,
+    reason_code: string | null,
     evidence_url: string | null,
     client: any
   ) {
     await client.query(
       `
-      INSERT INTO delivery_attempts (id_order, attempt_no, id_shipper, result, reason_fail, evidence_url)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO delivery_attempts (id_order, attempt_no, id_shipper, result, reason_fail, reason_code, evidence_url)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
     `,
-      [id_order, attempt_no, id_shipper, result_val, reason_fail, evidence_url]
+      [id_order, attempt_no, id_shipper, result_val, reason_fail, reason_code, evidence_url]
     );
   }
 
@@ -296,30 +298,30 @@ export class ShipperRepository {
   }
 
   async findWalletByShopOrder(id_order: number, client: any) {
-    const result = await client.query(
+    const account = await client.query(
       `
-      SELECT w.id_wallet, w.balance
-      FROM wallets w
-      JOIN shops sh ON w.id_account = sh.id_user
+      SELECT sh.id_user
+      FROM shops sh
       JOIN stores s ON s.id_shop = sh.id_shop
       JOIN orders o ON o.id_store = s.id_store
       WHERE o.id_order = $1
-      FOR UPDATE
+      LIMIT 1
     `,
       [id_order]
     );
-    return result.rows[0] || null;
+    if (!account.rows[0]?.id_user) return null;
+    return await getSyncedWalletByUserId(Number(account.rows[0].id_user), client, true);
   }
 
-  async chargeRedeliveryFee(id_wallet: number, client: any) {
-    const fee = 11000;
-    await client.query('UPDATE wallets SET balance = balance - $1 WHERE id_wallet = $2', [fee, id_wallet]);
-    await client.query('INSERT INTO transaction_history (id_wallet, amount, type) VALUES ($1, $2, $3)', [
-      id_wallet,
-      -fee,
-      'PHI GIAO LAI LAN 4+',
-    ]);
-    return fee;
+  async chargeRedeliveryFee(id_wallet: number, amount: number, client: any, note = 'PHI GIAO LAI LAN 4+') {
+    return await deductWalletById(id_wallet, amount, note, client, true);
+  }
+
+  async markOrderReturn(id_order: number, return_fee: number, client: any) {
+    await client.query(
+      "UPDATE orders SET status = 'HOÀN HÀNG', is_return = TRUE, return_fee = $1, current_shipper_id = NULL WHERE id_order = $2",
+      [return_fee, id_order]
+    );
   }
 
   async getSpokeLocation(id_spoke: number) {

@@ -7,16 +7,19 @@ import './Scanner.css';
 
 type Mode = 'pickup' | 'deliver' | 'start';
 type Step = 'scan' | 'confirm' | 'success' | 'fail';
-type FailReason = string;
+type FailReason = {
+  code: string;
+  label: string;
+};
 
 const FAIL_REASONS: FailReason[] = [
-  'Khách gọi không nghe máy / không liên lạc được',
-  'Khách hẹn giao lại ngày khác',
-  'Sai địa chỉ giao hàng',
-  'Khách từ chối nhận hàng',
-  'Hàng bị hư hỏng trong quá trình vận chuyển',
-  'Địa chỉ không tồn tại',
-  'Khách vắng nhà cả ngày',
+  { code: 'CUSTOMER_UNREACHABLE', label: 'Khách gọi không nghe máy / không liên lạc được' },
+  { code: 'CUSTOMER_NOT_HOME', label: 'Khách vắng nhà' },
+  { code: 'RESCHEDULE_REQUEST', label: 'Khách hẹn giao lại ngày khác' },
+  { code: 'TEMPORARY_ISSUE', label: 'Sự cố tạm thời, có thể giao lại' },
+  { code: 'CUSTOMER_REJECTED', label: 'Khách từ chối nhận hàng' },
+  { code: 'INVALID_ADDRESS', label: 'Sai địa chỉ giao hàng' },
+  { code: 'NON_EXISTENT_RECEIVER', label: 'Người nhận/địa chỉ không tồn tại' },
 ];
 
 const Scanner = () => {
@@ -193,13 +196,16 @@ const Scanner = () => {
   };
 
   const handleReportFailed = async () => {
-    const reason = failReason === 'custom' ? customReason : failReason;
+    const selectedReason = FAIL_REASONS.find((item) => item.code === failReason);
+    const reason = failReason === 'custom' ? customReason : selectedReason?.label || failReason;
+    const reasonCode = failReason === 'custom' ? 'TEMPORARY_ISSUE' : selectedReason?.code;
     if (!reason) { showToast('Vui lòng chọn lý do giao thất bại!', 'error'); return; }
     setLoading(true);
     try {
       const res: any = await api.post('/shipper/scan/failed', {
         tracking_code: scannedCode,
         reason_fail: reason,
+        reason_code: reasonCode,
         evidence_url: evidencePreview || undefined,
       });
       if (res?.status === 'success') {
@@ -332,12 +338,12 @@ const Scanner = () => {
         <div className="sc-fail-reason">
           <div className="sc-fail-label"><FiXCircle size={13} /> Chọn lý do thất bại:</div>
           <div className="sc-reasons-list">
-            {FAIL_REASONS.map(r => (
+            {FAIL_REASONS.map(reason => (
               <button
-                key={r}
-                className={failReason === r ? 'sc-reason-btn active' : 'sc-reason-btn'}
-                onClick={() => setFailReason(r)}
-              >{r}</button>
+                key={reason.code}
+                className={failReason === reason.code ? 'sc-reason-btn active' : 'sc-reason-btn'}
+                onClick={() => setFailReason(reason.code)}
+              >{reason.label}</button>
             ))}
             <button className={failReason === 'custom' ? 'sc-reason-btn active' : 'sc-reason-btn'} onClick={() => setFailReason('custom')}>✏️ Nhập lý do khác...</button>
           </div>
@@ -362,7 +368,10 @@ const Scanner = () => {
   );
 
   const renderSuccessStep = () => {
-    const isFailReport = resultData?.new_status === 'GIAO THẤT BẠI' || resultData?.status === 'GIAO THẤT BẠI';
+    const isFailReport =
+      resultData?.new_status === 'GIAO THẤT BẠI' ||
+      resultData?.status === 'GIAO THẤT BẠI' ||
+      resultData?.failure_action === 'RETURN_REQUIRED';
     return (
       <div className="sc-result-step">
         <div className={`sc-result-icon ${isFailReport ? 'fail' : 'ok'}`}>
@@ -379,6 +388,11 @@ const Scanner = () => {
         {resultData?.redelivery_fee_charged > 0 && (
           <div className="sc-fee-warn">
             ⚠️ Phí giao lại lần {resultData?.attempt_no}: <strong>{Number(resultData.redelivery_fee_charged).toLocaleString('vi-VN')}đ</strong> đã trừ ví Shop
+          </div>
+        )}
+        {resultData?.return_fee_charged > 0 && (
+          <div className="sc-fee-warn">
+            Phí hoàn hàng: <strong>{Number(resultData.return_fee_charged).toLocaleString('vi-VN')}đ</strong> đã trừ ví Shop
           </div>
         )}
         <div className="sc-result-actions">

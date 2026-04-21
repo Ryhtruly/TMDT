@@ -159,7 +159,19 @@ const Wallet = () => {
               <div style={{ fontSize: 16, opacity: 0.9 }}>Số dư Ví trả phí ship</div>
               <div className="balance-amount">{money(wallet?.balance)}</div>
               <div style={{ fontSize: 14, opacity: 0.8 }}>Hạn mức tín dụng: {money(wallet?.credit_limit)}</div>
-              <div style={{ fontSize: 14, opacity: 0.8 }}>Khả dụng: {money(wallet?.available_balance)}</div>
+              {Number(wallet?.used_credit || 0) > 0 && (
+                <div style={{ fontSize: 14, opacity: 0.95 }}>
+                  Công nợ hiện tại: {money(wallet?.used_credit)}
+                </div>
+              )}
+              <div style={{ fontSize: 14, opacity: 0.8 }}>Khả dụng: {money(Math.max(0, Number(wallet?.available_balance || 0)))}</div>
+              {wallet?.debt_notice?.should_show && (
+                <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700 }}>
+                  {wallet.debt_notice.is_locked
+                    ? 'Tài khoản đang bị hạn chế tạo đơn. Vui lòng nạp tiền để mở lại dịch vụ.'
+                    : `Còn ${wallet.debt_notice.debt_days_until_due || 0} ngày để thanh toán công nợ.`}
+                </div>
+              )}
             </div>
             <button className="btn-outline" onClick={() => setShowTopupModal(true)} style={{ background: 'white', color: 'var(--primary-color)', border: 'none', padding: '12px 24px' }}>
               Nạp Thêm Tiền

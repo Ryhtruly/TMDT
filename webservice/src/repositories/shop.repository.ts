@@ -1,4 +1,5 @@
 import { pool } from '../config/db';
+import { getSyncedWalletByUserId } from '../utils/walletDebt';
 import { isSameArea } from '../utils/location';
 
 export class ShopRepository {
@@ -145,11 +146,7 @@ export class ShopRepository {
 
   // === VÍ TIỀN ===
   async getWalletByUserId(id_user: number) {
-    const result = await pool.query(
-      'SELECT * FROM wallets WHERE id_account = $1',
-      [id_user]
-    );
-    return result.rows[0] || null;
+    return await getSyncedWalletByUserId(id_user, pool);
   }
 
   async getTransactionHistory(id_wallet: number) {
@@ -174,6 +171,10 @@ export class ShopRepository {
       'INSERT INTO transaction_history (id_wallet, amount, type) VALUES ($1, $2, $3)',
       [id_wallet, amount, 'NẠP TIỀN']
     );
+    const wallet = await client.query('SELECT id_account FROM wallets WHERE id_wallet = $1', [id_wallet]);
+    if (wallet.rows[0]?.id_account) {
+      await getSyncedWalletByUserId(Number(wallet.rows[0].id_account), client, true);
+    }
   }
 
   // Khởi tạo request nạp tiền PayOS
@@ -238,6 +239,10 @@ export class ShopRepository {
       'INSERT INTO transaction_history (id_wallet, amount, type) VALUES ($1, $2, $3)',
       [id_wallet, amount, 'HOÀN TIỀN HỦY ĐƠN']
     );
+    const wallet = await client.query('SELECT id_account FROM wallets WHERE id_wallet = $1', [id_wallet]);
+    if (wallet.rows[0]?.id_account) {
+      await getSyncedWalletByUserId(Number(wallet.rows[0].id_account), client, true);
+    }
   }
 
   // === BÁO CÁO DÒNG TIỀN ===

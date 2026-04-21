@@ -10,7 +10,7 @@ import {
   getNotifications, markNotificationRead, markAllNotificationsRead,
   submitFeedback, getFeedbacks, getMyFeedbacks, updateFeedbackStatus,
   getShipperCodSummary,
-  requestReturn,
+  getReturnQuote, requestReturn,
   calcShipperIncome, getShipperIncomeHistory, setShipperSalary,
   getAuditLogs,
   getOperationsReport,
@@ -68,6 +68,7 @@ router.put('/feedbacks/:id', verifyToken, checkRoles(['ADMIN']), updateFeedbackS
 router.get('/shipper/cod-summary', verifyToken, checkRoles(['SHIPPER']), getShipperCodSummary);
 
 // Return orders
+router.get('/orders/:id/return-quote', verifyToken, checkRoles(['SHOP']), getReturnQuote);
 router.post('/orders/:id/return', verifyToken, checkRoles(['SHOP']), requestReturn);
 
 // Shipper income

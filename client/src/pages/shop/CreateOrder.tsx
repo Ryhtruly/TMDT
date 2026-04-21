@@ -1,14 +1,45 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FiBox, FiChevronRight, FiPhone, FiTag, FiCheck, FiX } from 'react-icons/fi';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import apiClient from '../../api/client';
 import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../../utils/phone';
 import './CreateOrder.css';
 
+const ORDER_DRAFT_KEY = 'shop_create_order_draft';
+
+const readOrderDraft = () => {
+  try {
+    const raw = localStorage.getItem(ORDER_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+type OrderFormData = {
+  id_store: string;
+  receiver_name: string;
+  receiver_phone: string;
+  receiver_address: string;
+  payer_type: string;
+  fee_payment_method: string;
+  id_service_type: number;
+  goods_type: string;
+  weight: number;
+  item_value: number;
+  cod_amount: number;
+  length: number;
+  width: number;
+  height: number;
+  note: string;
+};
+
 const CreateOrder = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const paramType = searchParams.get('type') || '1';
+  const [savedDraft] = useState<any>(() => readOrderDraft());
+  const skipFirstTypeSync = useRef(Boolean(savedDraft?.formData));
 
   const [stores, setStores] = useState<any[]>([]);
   const [spokes, setSpokes] = useState<any[]>([]);
@@ -26,22 +57,23 @@ const CreateOrder = () => {
   const [selectedWard, setSelectedWard] = useState<any>(null);
   const [streetNum, setStreetNum] = useState('');
 
-  const [pickupType, setPickupType] = useState('TAN_NOI');
-  const [pickupShift, setPickupShift] = useState('');
-  const [dropoffSpokeId, setDropoffSpokeId] = useState('');
-  const [idDestArea, setIdDestArea] = useState<number | null>(null);
+  const [pickupType, setPickupType] = useState(savedDraft?.pickupType || 'TAN_NOI');
+  const [pickupShift, setPickupShift] = useState(savedDraft?.pickupShift || '');
+  const [dropoffSpokeId, setDropoffSpokeId] = useState(savedDraft?.dropoffSpokeId || '');
+  const [idDestArea, setIdDestArea] = useState<number | null>(() => savedDraft?.idDestArea ? Number(savedDraft.idDestArea) : null);
   const [previewFee, setPreviewFee] = useState<any>(null);
+  const [previewError, setPreviewError] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [loadingSubmit, setLoadingSubmit] = useState(false);
 
   // Promo code state
   const [promos, setPromos] = useState<any[]>([]);
   const [showPromoModal, setShowPromoModal] = useState(false);
-  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [appliedPromo, setAppliedPromo] = useState<any>(savedDraft?.appliedPromo || null);
   const [promoCode, setPromoCode] = useState('');
   const [promoError, setPromoError] = useState('');
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<OrderFormData>(() => ({
     id_store: '',
     receiver_name: '',
     receiver_phone: '',
@@ -57,11 +89,17 @@ const CreateOrder = () => {
     width: 10,
     height: 10,
     note: '',
-  });
+    ...(savedDraft?.formData || {}),
+  }));
 
   const getActiveStore = () => stores.find((s) => String(s.id_store) === String(formData.id_store));
 
   useEffect(() => {
+    if (skipFirstTypeSync.current) {
+      skipFirstTypeSync.current = false;
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       goods_type: paramType === '2' ? 'HEAVY' : 'LIGHT',
@@ -84,7 +122,7 @@ const CreateOrder = () => {
         const firstId = defaultId && storeRes.data.some((s: any) => String(s.id_store) === defaultId)
           ? defaultId
           : String(storeRes.data[0]?.id_store || '');
-        if (firstId) setFormData((prev) => ({ ...prev, id_store: firstId }));
+        if (firstId) setFormData((prev) => ({ ...prev, id_store: prev.id_store || firstId }));
       }
 
       const spokeRes = (await apiClient.get('/shop/spokes').catch(() => null)) as any;
@@ -175,6 +213,7 @@ const CreateOrder = () => {
     const timer = setTimeout(async () => {
       if (!formData.id_store || !idDestArea) {
         setPreviewFee(null);
+        setPreviewError('');
         return;
       }
       setLoadingPreview(true);
@@ -194,11 +233,13 @@ const CreateOrder = () => {
           height: Number(formData.height || 0),
         })) as any;
         setPreviewFee(res?.status === 'success' ? res.data : null);
+        setPreviewError(res?.status === 'success' ? '' : 'Khong tinh duoc phi van chuyen.');
         if (res?.status === 'success' && res.data?.operational_route_type !== 'NOI_TINH' && formData.id_service_type === 3) {
           setFormData((p) => ({ ...p, id_service_type: 1 }));
         }
-      } catch {
+      } catch (err: any) {
         setPreviewFee(null);
+        setPreviewError(err?.response?.data?.message || 'Khong tinh duoc phi van chuyen. Vui long kiem tra dia chi va cau hinh cuoc.');
       } finally {
         setLoadingPreview(false);
       }
@@ -241,6 +282,7 @@ const CreateOrder = () => {
         if (deliveryCash > 0) message += `\nKhi giao, shipper thu COD ${deliveryCash.toLocaleString('vi-VN')} d tu nguoi nhan.`;
       }
       alert(message);
+      localStorage.removeItem(ORDER_DRAFT_KEY);
       navigate('/orders');
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Co loi xay ra.');
@@ -250,7 +292,6 @@ const CreateOrder = () => {
   };
 
   const fee = previewFee?.fee_breakdown || {};
-  const flow = previewFee?.payment_flow || {};
   const walletCheck = previewFee?.wallet_check || {};
   const billableWeight = Math.max(Number(formData.weight || 0), (Number(formData.length || 0) * Number(formData.width || 0) * Number(formData.height || 0)) / 5);
 
@@ -262,6 +303,25 @@ const CreateOrder = () => {
       : Math.min(appliedPromo.discount_value, baseTotalFee)
     : 0;
   const finalTotalFee = Math.max(0, baseTotalFee - promoDiscount);
+  const codAmount = Number(formData.cod_amount || 0);
+  const displaySenderChargeNow = formData.payer_type === 'SENDER' && formData.fee_payment_method === 'WALLET' ? finalTotalFee : 0;
+  const displaySenderCashFeeOnPickup = formData.payer_type === 'SENDER' && formData.fee_payment_method === 'CASH' ? finalTotalFee : 0;
+  const displayReceiverFeeOnDelivery = formData.payer_type === 'RECEIVER' ? finalTotalFee : 0;
+  const displayCashToCollectOnDelivery = codAmount + displayReceiverFeeOnDelivery;
+  const displayTotalCashExpectedFromShipper = displaySenderCashFeeOnPickup + displayCashToCollectOnDelivery;
+
+  const handleSaveDraft = () => {
+    localStorage.setItem(ORDER_DRAFT_KEY, JSON.stringify({
+      formData,
+      idDestArea,
+      pickupType,
+      pickupShift,
+      dropoffSpokeId,
+      appliedPromo,
+      savedAt: new Date().toISOString(),
+    }));
+    alert('Da luu nhap don hang tren trinh duyet nay. Mo lai trang tao don se tu dien lai.');
+  };
 
   const handleApplyPromoCode = async () => {
     setPromoError('');
@@ -405,18 +465,17 @@ const CreateOrder = () => {
             {promoDiscount > 0 && <div className="bill-row" style={{ color: '#16a34a' }}><span>🎟 Giảm giá ({appliedPromo.code})</span><strong>−{promoDiscount.toLocaleString('vi-VN')} d</strong></div>}
             <div className="bill-row total"><span>Tổng phí:</span><span style={{ color: promoDiscount > 0 ? '#16a34a' : undefined }}>{finalTotalFee.toLocaleString('vi-VN')} d</span></div>
 
-            {!previewFee && <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--slate-500)' }}>Chon dia chi nguoi nhan de xem phi.</div>}
-            {previewFee && (
-              <div style={{ marginTop: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', fontSize: '13px' }}>
-                <div className="bill-row"><span>COD shop thu ho</span><strong>{Number(formData.cod_amount || 0).toLocaleString('vi-VN')} d</strong></div>
-                <div className="bill-row"><span>Shop tra bang vi</span><strong>{Number(flow.sender_charge_now || 0).toLocaleString('vi-VN')} d</strong></div>
-                <div className="bill-row"><span>Shop tra tien mat luc lay</span><strong>{Number(flow.sender_cash_fee_on_pickup || 0).toLocaleString('vi-VN')} d</strong></div>
-                <div className="bill-row"><span>Nguoi nhan tra phi</span><strong>{Number(flow.receiver_fee_on_delivery || 0).toLocaleString('vi-VN')} d</strong></div>
-                <div className="bill-row total"><span>Shipper can thu khi giao</span><span>{Number(flow.cash_to_collect_on_delivery || 0).toLocaleString('vi-VN')} d</span></div>
-                <div className="bill-row total"><span>Tong tien mat shipper nop</span><span>{Number(flow.total_cash_expected_from_shipper || 0).toLocaleString('vi-VN')} d</span></div>
-              </div>
-            )}
-            {previewFee && formData.payer_type === 'SENDER' && formData.fee_payment_method === 'WALLET' && <div style={{ marginTop: '12px', fontSize: '12px', color: walletCheck.is_sufficient ? '#0f766e' : '#b91c1c' }}>So du kha dung: {Number(walletCheck.available_balance || 0).toLocaleString('vi-VN')} d. Sau tao don con: {Math.max(0, Number(walletCheck.available_balance || 0) - Number(flow.sender_charge_now || 0)).toLocaleString('vi-VN')} d.</div>}
+            {!previewFee && <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--slate-500)' }}>Chon dia chi nguoi nhan de tinh phi ship. COD van duoc tam tinh ben duoi.</div>}
+            {previewError && <div style={{ marginTop: '10px', fontSize: '12px', color: '#b91c1c', fontWeight: 600 }}>{previewError}</div>}
+            <div style={{ marginTop: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', fontSize: '13px' }}>
+              <div className="bill-row"><span>COD shop thu ho</span><strong>{codAmount.toLocaleString('vi-VN')} d</strong></div>
+              <div className="bill-row"><span>Shop tra bang vi</span><strong>{displaySenderChargeNow.toLocaleString('vi-VN')} d</strong></div>
+              <div className="bill-row"><span>Shop tra tien mat luc lay</span><strong>{displaySenderCashFeeOnPickup.toLocaleString('vi-VN')} d</strong></div>
+              <div className="bill-row"><span>Nguoi nhan tra phi</span><strong>{displayReceiverFeeOnDelivery.toLocaleString('vi-VN')} d</strong></div>
+              <div className="bill-row total"><span>Shipper can thu khi giao</span><span>{displayCashToCollectOnDelivery.toLocaleString('vi-VN')} d</span></div>
+              <div className="bill-row total"><span>Tong tien mat shipper nop</span><span>{displayTotalCashExpectedFromShipper.toLocaleString('vi-VN')} d</span></div>
+            </div>
+            {previewFee && formData.payer_type === 'SENDER' && formData.fee_payment_method === 'WALLET' && <div style={{ marginTop: '12px', fontSize: '12px', color: walletCheck.is_sufficient ? '#0f766e' : '#b91c1c' }}>So du kha dung: {Number(walletCheck.available_balance || 0).toLocaleString('vi-VN')} d. Sau tao don con: {Math.max(0, Number(walletCheck.available_balance || 0) - displaySenderChargeNow).toLocaleString('vi-VN')} d.</div>}
             {walletCheck.warning && <div style={{ marginTop: '10px', fontSize: '12px', color: walletCheck.is_sufficient ? '#0f766e' : '#b91c1c' }}>{walletCheck.warning}</div>}
             {/* Promo Code */}
             <div
@@ -465,8 +524,8 @@ const CreateOrder = () => {
           </div>
 
           <div className="bill-actions">
-            <button type="button" className="btn-draft">LUU NHAP</button>
-            <button type="submit" disabled={loadingSubmit || loadingPreview || !previewFee} className="btn-create">{loadingSubmit ? 'ĐANG XỬ LÝ...' : 'TẠO ĐƠN'}</button>
+            <button type="button" className="btn-draft" onClick={handleSaveDraft}>LUU NHAP</button>
+            <button type="submit" disabled={loadingSubmit || loadingPreview} className="btn-create">{loadingSubmit ? 'ĐANG XỬ LÝ...' : 'TẠO ĐƠN'}</button>
           </div>
         </div>
       </div>

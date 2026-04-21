@@ -216,6 +216,73 @@ export class AdminService {
     return await adminRepo.getEmployees();
   }
 
+  async updateEmployee(id_user: number, employeeData: any) {
+    if (!Number.isFinite(id_user) || id_user <= 0) {
+      throw new Error('User ID khong hop le.');
+    }
+
+    const { phone, email, citizen_id, full_name, gender, dob, home_address } = employeeData;
+
+    if (!phone || !full_name || !email || !citizen_id) {
+      throw new Error('Thieu thong tin bat buoc: phone, full_name, email, citizen_id.');
+    }
+
+    const normalizedPhone = assertValidVietnamPhone(phone, 'SDT nhan su');
+    const client = await adminRepo.getTxClient();
+
+    try {
+      await client.query('BEGIN');
+
+      const existingEmployee = await client.query(
+        'SELECT id_employee FROM employees WHERE id_user = $1',
+        [id_user]
+      );
+      if (!existingEmployee.rows[0]) {
+        throw new Error(`Khong tim thay nhan vien User ID=${id_user}`);
+      }
+
+      const duplicatePhone = await client.query(
+        'SELECT id_user FROM users WHERE phone = $1 AND id_user <> $2 LIMIT 1',
+        [normalizedPhone, id_user]
+      );
+      if (duplicatePhone.rows[0]) {
+        throw new Error('SDT nay da duoc su dung boi user khac.');
+      }
+
+      const userRes = await client.query(
+        'UPDATE users SET phone = $1 WHERE id_user = $2 RETURNING id_user, phone, is_active',
+        [normalizedPhone, id_user]
+      );
+      if (!userRes.rows[0]) {
+        throw new Error(`Khong tim thay User ID=${id_user}`);
+      }
+
+      const employeeRes = await client.query(
+        `UPDATE employees
+         SET full_name = $1,
+             gender = $2,
+             dob = $3,
+             email = $4,
+             citizen_id = $5,
+             home_address = $6
+         WHERE id_user = $7
+         RETURNING id_employee, id_user, full_name, gender, dob, email, citizen_id, home_address`,
+        [full_name, gender || null, dob || null, email, citizen_id, home_address || null, id_user]
+      );
+
+      await client.query('COMMIT');
+      return { ...employeeRes.rows[0], phone: userRes.rows[0].phone, is_active: userRes.rows[0].is_active };
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      if (error.code === '23505') {
+        throw new Error('Cap nhat that bai. SDT/Email/CCCD co the da bi trung.');
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async deactivateEmployee(id_user: number) {
     const result = await adminRepo.deactivateEmployee(id_user);
     if (!result) throw new Error(`Không tìm thấy User ID=${id_user}`);

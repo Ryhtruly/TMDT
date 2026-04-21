@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiPackage, FiMapPin, FiDollarSign, FiClock } from 'react-icons/fi';
+import { FiArrowLeft, FiPackage, FiMapPin, FiDollarSign, FiClock, FiRefreshCcw } from 'react-icons/fi';
 import apiClient from '../../api/client';
 import './Orders.css';
 
@@ -31,25 +31,55 @@ const OrderDetail = () => {
   const [order, setOrder] = useState<any>(null);
   const [timeline, setTimeline] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [returnLoading, setReturnLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const fetchOrder = async () => {
+    setLoading(true);
+    try {
+      // id có thể là tracking_code hoặc id_order — dùng tracking_code
+      const res: any = await apiClient.get(`/shop/orders/${encodeURIComponent(String(id))}/track`);
+      const data = res?.data;
+      setOrder(data?.order || data);
+      setTimeline(data?.timeline || data?.logs || []);
+      setError('');
+    } catch (e: any) {
+      setError(e.response?.data?.message || 'Không tìm thấy đơn hàng.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchOrder = async () => {
-      setLoading(true);
-      try {
-        // id có thể là tracking_code hoặc id_order — dùng tracking_code
-        const res: any = await apiClient.get(`/shop/orders/${encodeURIComponent(String(id))}/track`);
-        const data = res?.data;
-        setOrder(data?.order || data);
-        setTimeline(data?.timeline || data?.logs || []);
-      } catch (e: any) {
-        setError(e.response?.data?.message || 'Không tìm thấy đơn hàng.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchOrder();
   }, [id]);
+
+  const handleReturnRequest = async () => {
+    if (!order?.id_order) return;
+    setReturnLoading(true);
+    try {
+      const quoteRes: any = await apiClient.get(`/orders/${order.id_order}/return-quote`);
+      const quote = quoteRes?.data || {};
+      const fee = Number(quote.return_fee || 0);
+      const ok = window.confirm(
+        `Yeu cau hoan hang don ${order.tracking_code}?\n\n` +
+        `Phi hoan hang: ${fee.toLocaleString('vi-VN')}d\n` +
+        `Cong thuc: ${quote.formula || '-'}\n` +
+        `So du kha dung: ${Number(quote.wallet_available || 0).toLocaleString('vi-VN')}d\n\n` +
+        'Phi se duoc tru vao vi/hang muc cua shop. Don se quay ve shop gui.'
+      );
+      if (!ok) return;
+
+      const res: any = await apiClient.post(`/orders/${order.id_order}/return`);
+      alert(res?.message || 'Da gui yeu cau hoan hang.');
+      window.dispatchEvent(new Event('wallet_updated'));
+      fetchOrder();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Khong the yeu cau hoan hang.');
+    } finally {
+      setReturnLoading(false);
+    }
+  };
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#6b7280' }}>Đang tải chi tiết đơn...</div>;
   if (error) return (
@@ -63,6 +93,7 @@ const OrderDetail = () => {
   if (!order) return null;
 
   const statusInfo = STATUS_MAP[order.status] || { label: order.status, color: '#6b7280', bg: '#f3f4f6' };
+  const canRequestReturn = ['GIAO THẤT BẠI', 'TẠI KHO'].includes(order.status) && !order.is_return;
 
   return (
     <div className="orders-page" style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -76,6 +107,16 @@ const OrderDetail = () => {
           <span style={{ padding: '4px 14px', borderRadius: 20, fontSize: 13, fontWeight: 700, color: statusInfo.color, background: statusInfo.bg }}>
             {statusInfo.label}
           </span>
+          {canRequestReturn && (
+            <button
+              className="btn-outline"
+              onClick={handleReturnRequest}
+              disabled={returnLoading}
+              style={{ borderColor: '#f97316', color: '#c2410c' }}
+            >
+              <FiRefreshCcw /> {returnLoading ? 'Dang xu ly...' : 'Yeu cau hoan hang'}
+            </button>
+          )}
         </div>
       </div>
 

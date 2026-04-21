@@ -185,8 +185,13 @@ export const getShipperCodSummary = async (req: AuthRequest, res: Response): Pro
 };
 
 // ============ HOÀN HÀNG ============
+export const getReturnQuote = async (req: AuthRequest, res: Response): Promise<void> => {
+  try { res.json({ status: 'success', data: await generalService.getReturnQuote(req.user.id_user, parseInt(String(req.params.id))) }); }
+  catch (e: any) { res.status(400).json({ status: 'error', message: e.message }); }
+};
+
 export const requestReturn = async (req: AuthRequest, res: Response): Promise<void> => {
-  try { res.json({ status: 'success', ...(await generalService.requestReturn(parseInt(String(req.params.id)))) }); }
+  try { res.json({ status: 'success', ...(await generalService.requestReturn(req.user.id_user, parseInt(String(req.params.id)))) }); }
   catch (e: any) { res.status(400).json({ status: 'error', message: e.message }); }
 };
 

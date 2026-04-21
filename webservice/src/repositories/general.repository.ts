@@ -299,6 +299,22 @@ export class GeneralRepository {
     return (await pool.query('SELECT * FROM orders WHERE id_order = $1', [id_order])).rows[0] || null;
   }
 
+  async getOrderForReturnByShop(id_order: number, id_user: number, client?: any, forUpdate = false) {
+    const db = client || pool;
+    const result = await db.query(
+      `
+      SELECT o.*, s.id_user as shop_user_id, st.store_name, st.address as pickup_address
+      FROM orders o
+      JOIN stores st ON st.id_store = o.id_store
+      JOIN shops s ON s.id_shop = st.id_shop
+      WHERE o.id_order = $1 AND s.id_user = $2
+      ${forUpdate ? 'FOR UPDATE OF o' : ''}
+      `,
+      [id_order, id_user]
+    );
+    return result.rows[0] || null;
+  }
+
   async getRouteTypeForOrder(id_order: number) {
     const result = await pool.query(`
       SELECT r.route_type FROM orders o
@@ -312,6 +328,19 @@ export class GeneralRepository {
 
   async setOrderReturn(id_order: number, return_fee: number, client: any) {
     await client.query("UPDATE orders SET status = 'HOÀN HÀNG', is_return = TRUE, return_fee = $1 WHERE id_order = $2", [return_fee, id_order]);
+  }
+
+  async insertOrderLogAtLatestLocation(id_order: number, id_actor: number, action: string, client: any) {
+    const latest = await client.query(
+      'SELECT id_location FROM order_logs WHERE id_order = $1 ORDER BY created_at DESC, id_log DESC LIMIT 1',
+      [id_order]
+    );
+    const idLocation = latest.rows[0]?.id_location;
+    if (!idLocation) return;
+    await client.query(
+      'INSERT INTO order_logs (id_order, id_location, id_actor, action) VALUES ($1, $2, $3, $4)',
+      [id_order, idLocation, id_actor, action]
+    );
   }
 
   // === SHIPPER INCOME (Bảng 33 Docx: lương cứng + hoa hồng - phạt) ===

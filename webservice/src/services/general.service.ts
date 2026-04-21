@@ -1,6 +1,9 @@
 import { GeneralRepository } from '../repositories/general.repository';
+import { OrderRepository } from '../repositories/order.repository';
+import { assertWalletNotDebtLocked, calcWalletAvailable } from '../utils/walletDebt';
 
 const repo = new GeneralRepository();
+const orderRepo = new OrderRepository();
 
 const COD_SERVICE_FEE = 5500;
 
@@ -256,31 +259,111 @@ export class GeneralService {
     return await repo.getShipperCodSummary(id_shipper, date);
   }
 
-  // === RETURN ORDERS ===
-  async requestReturn(id_order: number) {
-    const order = await repo.getOrderForReturn(id_order);
-    if (!order) throw new Error('Don hang khong ton tai.');
+  private isLocalReturnRoute(routeType: string) {
+    const normalized = String(routeType || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd')
+      .replace(/\u0110/g, 'D')
+      .toUpperCase();
+    return ['DIRECT', 'INTRA_HUB', 'NOI TINH'].some((item) => normalized.includes(item));
+  }
+
+  private async resolveReturnRouteType(order: any) {
+    const [originArea, destArea] = await Promise.all([
+      orderRepo.findOriginAreaByStore(order.id_store),
+      orderRepo.findAreaById(order.id_dest_area),
+    ]);
+    if (originArea && destArea) {
+      if (Number(originArea.id_spoke) === Number(destArea.id_spoke)) return 'DIRECT';
+      if (Number(originArea.parent_hub_id) === Number(destArea.parent_hub_id)) return 'INTRA_HUB';
+      return 'INTER_HUB';
+    }
+    return await repo.getRouteTypeForOrder(order.id_order);
+  }
+
+  private assertReturnable(order: any) {
+    if (!order) throw new Error('Don hang khong ton tai hoac khong thuoc shop nay.');
+    if (order.is_return || ['HOÀN HÀNG', 'ĐANG HOÀN'].includes(order.status)) {
+      throw new Error('Don nay da nam trong luong hoan hang.');
+    }
     if (!['GIAO THẤT BẠI', 'TẠI KHO'].includes(order.status)) {
       throw new Error(`Khong the hoan hang. Don dang o trang thai "${order.status}".`);
     }
+  }
 
-    const routeType = await repo.getRouteTypeForOrder(id_order);
-    const returnFee = (routeType === 'DIRECT' || routeType === 'INTRA_HUB')
-      ? 5000
-      : Math.round(Number(order.shipping_fee || 0) * 0.5);
+  private buildReturnFee(order: any, routeType: string) {
+    const isHeavy = Number(order.weight || 0) >= 20000;
+    const shippingFee = Number(order.shipping_fee || 0);
+    const returnFee = Math.round(shippingFee * (isHeavy ? 1 : 0.5));
+    return {
+      returnFee,
+      formula: isHeavy
+        ? `Hang nang: 100% x ${shippingFee.toLocaleString('vi-VN')}d`
+        : `Hang nhe: 50% x ${shippingFee.toLocaleString('vi-VN')}d`,
+    };
+  }
+
+  // === RETURN ORDERS ===
+  async getReturnQuote(id_user: number, id_order: number) {
+    const order = await repo.getOrderForReturnByShop(id_order, id_user);
+    this.assertReturnable(order);
+
+    const routeType = await this.resolveReturnRouteType(order);
+    const { returnFee, formula } = this.buildReturnFee(order, routeType);
 
     const client = await repo.getTxClient();
     try {
+      const wallet = await orderRepo.findWalletForUpdate(id_user, client);
+      const walletAvailable = wallet
+        ? Number(wallet.balance || 0) + Number(wallet.credit_limit || 0) - Number(wallet.used_credit || 0)
+        : 0;
+      return {
+        tracking_code: order.tracking_code,
+        status: order.status,
+        return_fee: returnFee,
+        route_type: routeType,
+        formula,
+        wallet_available: walletAvailable,
+        can_pay: walletAvailable >= returnFee,
+        shortfall: Math.max(0, returnFee - walletAvailable),
+        message: 'Shop chiu phi hoan hang. Phi se tru vao vi/hang muc khi xac nhan.',
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async requestReturn(id_user: number, id_order: number) {
+    const client = await repo.getTxClient();
+    try {
       await client.query('BEGIN');
+      const order = await repo.getOrderForReturnByShop(id_order, id_user, client, true);
+      this.assertReturnable(order);
+
+      const routeType = await this.resolveReturnRouteType(order);
+      const { returnFee, formula } = this.buildReturnFee(order, routeType);
+      const wallet = await orderRepo.findWalletForUpdate(id_user, client);
+      if (!wallet) throw new Error('Vi tien khong ton tai. Vui long lien he admin.');
+
+      assertWalletNotDebtLocked(wallet);
+      const walletAvailable = calcWalletAvailable(wallet);
+      if (walletAvailable < returnFee) {
+        throw new Error(`So du kha dung khong du de hoan hang. Can nap them ${(returnFee - walletAvailable).toLocaleString('vi-VN')}d.`);
+      }
+
+      if (returnFee > 0) {
+        await orderRepo.deductWalletAndLog(wallet.id_wallet, returnFee, `PHI HOAN HANG ${order.tracking_code}`, client);
+      }
       await repo.setOrderReturn(id_order, returnFee, client);
+      await repo.insertOrderLogAtLatestLocation(id_order, id_user, 'YEU CAU HOAN HANG', client);
       await client.query('COMMIT');
       return {
         tracking_code: order.tracking_code,
         return_fee: returnFee,
         route_type: routeType,
-        formula: routeType === 'DIRECT' || routeType === 'INTRA_HUB'
-          ? 'Noi tinh: 5.000d'
-          : `50% x ${Number(order.shipping_fee).toLocaleString('vi-VN')}d`,
+        formula,
+        remaining_balance: walletAvailable - returnFee,
         message: `Don da chuyen HOAN HANG. Phi hoan: ${returnFee.toLocaleString('vi-VN')}d`,
       };
     } catch (error) {

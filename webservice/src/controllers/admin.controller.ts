@@ -211,7 +211,18 @@ export const getEmployees = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-// Vô hiệu hóa nhân viên
+// Cap nhat thong tin nhan vien
+export const updateEmployee = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id_user = parseInt(String(req.params.id), 10);
+    const data = await adminService.updateEmployee(id_user, req.body);
+    res.json({ status: 'success', message: `Da cap nhat User-${id_user}.`, data });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+// Vo hieu hoa nhan vien
 export const deactivateEmployee = async (req: Request, res: Response): Promise<void> => {
   try {
     const id_user = parseInt(String(req.params.id));

@@ -117,16 +117,6 @@ const Settings = () => {
     }
   };
 
-  const routeTypeColor = (type: string) => {
-    const map: Record<string, { bg: string; color: string }> = {
-      INTRA: { bg: '#dbeafe', color: '#1d4ed8' },
-      INTER: { bg: '#ede9fe', color: '#6d28d9' },
-      EXPRESS: { bg: '#fff7ed', color: '#c2410c' },
-      INSURANCE: { bg: '#fef9c3', color: '#854d0e' },
-    };
-    return map[type] || { bg: '#f3f4f6', color: '#374151' };
-  };
-
   return (
     <div className="settings-page">
       <div className="page-header">

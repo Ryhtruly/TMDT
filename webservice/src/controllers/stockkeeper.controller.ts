@@ -56,6 +56,15 @@ export const getBagSuggestions = async (req: AuthRequest, res: Response): Promis
   }
 };
 
+export const getBags = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const bags = await stockService.getBags(req.user.id_user);
+    res.json({ status: 'success', data: bags });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
 export const createBag = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { dest_hub_id, next_hop_id, next_hop_type, order_ids } = req.body;

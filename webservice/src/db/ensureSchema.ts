@@ -98,6 +98,73 @@ export const ensureSchema = async () => {
   `);
 
   await pool.query(`
+    ALTER TABLE wallets
+    ADD COLUMN IF NOT EXISTS debt_started_at TIMESTAMP;
+  `);
+
+  await pool.query(`
+    ALTER TABLE wallets
+    ADD COLUMN IF NOT EXISTS debt_due_at TIMESTAMP;
+  `);
+
+  await pool.query(`
+    ALTER TABLE wallets
+    ADD COLUMN IF NOT EXISTS debt_locked_at TIMESTAMP;
+  `);
+
+  await pool.query(`
+    ALTER TABLE wallets
+    ADD COLUMN IF NOT EXISTS debt_status VARCHAR(20) NOT NULL DEFAULT 'NORMAL';
+  `);
+
+  await pool.query(`
+    ALTER TABLE delivery_attempts
+    ADD COLUMN IF NOT EXISTS reason_code VARCHAR(50);
+  `);
+
+  await pool.query(`
+    ALTER TABLE pricing_rules
+    ADD COLUMN IF NOT EXISTS goods_type VARCHAR(10) NOT NULL DEFAULT 'LIGHT';
+  `);
+
+  await pool.query(`
+    ALTER TABLE pricing_rules
+    ADD COLUMN IF NOT EXISTS base_weight_g NUMERIC NOT NULL DEFAULT 500;
+  `);
+
+  await pool.query(`
+    ALTER TABLE pricing_rules
+    ADD COLUMN IF NOT EXISTS extra_per_500g NUMERIC NOT NULL DEFAULT 2000;
+  `);
+
+  await pool.query(`
+    UPDATE pricing_rules
+    SET goods_type = 'LIGHT'
+    WHERE goods_type IS NULL OR TRIM(goods_type) = '';
+  `);
+
+  await pool.query(`
+    INSERT INTO pricing_rules (route_type, area_type, goods_type, base_weight_g, weight_step, price, extra_per_500g)
+    SELECT rule.route_type, rule.area_type, rule.goods_type, rule.base_weight_g, rule.weight_step, rule.price, rule.extra_per_500g
+    FROM (
+      VALUES
+        (U&'N\\1ED9i t\\1EC9nh', U&'N\\1ED8I TH\\00C0NH', 'HEAVY', 20000, 3000, 100000, 3000),
+        (U&'N\\1ED9i t\\1EC9nh', U&'NGO\\1EA0I TH\\00C0NH', 'HEAVY', 20000, 3000, 130000, 3500),
+        (U&'Li\\00EAn V\\00F9ng', U&'N\\1ED8I TH\\00C0NH', 'HEAVY', 20000, 3000, 200000, 5000),
+        (U&'Li\\00EAn V\\00F9ng', U&'NGO\\1EA0I TH\\00C0NH', 'HEAVY', 20000, 3000, 250000, 5500),
+        (U&'Xuy\\00EAn Mi\\1EC1n', U&'N\\1ED8I TH\\00C0NH', 'HEAVY', 20000, 3000, 300000, 7000),
+        (U&'Xuy\\00EAn Mi\\1EC1n', U&'NGO\\1EA0I TH\\00C0NH', 'HEAVY', 20000, 3000, 360000, 8000)
+    ) AS rule(route_type, area_type, goods_type, base_weight_g, weight_step, price, extra_per_500g)
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM pricing_rules pr
+      WHERE pr.route_type = rule.route_type
+        AND pr.area_type = rule.area_type
+        AND pr.goods_type = rule.goods_type
+    );
+  `);
+
+  await pool.query(`
     ALTER TABLE cod_payouts
     ADD COLUMN IF NOT EXISTS id_bank INT;
   `);

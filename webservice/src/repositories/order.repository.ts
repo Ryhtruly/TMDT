@@ -1,5 +1,6 @@
 import { pool } from '../config/db';
 import { extractProvinceDistrictFromAddress, isSameArea } from '../utils/location';
+import { deductWalletAndLog as deductWalletById, getSyncedWalletByUserId } from '../utils/walletDebt';
 
 export class OrderRepository {
   // Lấy thông tin Store để verify Shop sở hữu
@@ -77,26 +78,12 @@ export class OrderRepository {
 
   // Khoá ví và kiểm tra số dư (Pessimistic Locking - chống race condition)
   async findWalletForUpdate(id_user: number, client: any) {
-    const result = await client.query(
-      'SELECT * FROM wallets WHERE id_account = $1 FOR UPDATE',
-      [id_user]
-    );
-    return result.rows[0] || null;
+    return await getSyncedWalletByUserId(id_user, client, true);
   }
 
   // Trừ tiền ví + ghi lịch sử
   async deductWalletAndLog(id_wallet: number, amount: number, note: string, client: any) {
-    await client.query(`
-      UPDATE wallets 
-      SET 
-        used_credit = used_credit + CASE WHEN balance < $1 THEN $1 - balance ELSE 0 END,
-        balance = CASE WHEN balance < $1 THEN 0 ELSE balance - $1 END
-      WHERE id_wallet = $2
-    `, [amount, id_wallet]);
-    await client.query(
-      'INSERT INTO transaction_history (id_wallet, amount, type) VALUES ($1, $2, $3)',
-      [id_wallet, -amount, note]
-    );
+    await deductWalletById(id_wallet, amount, note, client, false);
   }
 
   // Chèn đơn hàng
@@ -202,18 +189,23 @@ export class OrderRepository {
     const orderResult = await pool.query(`
       SELECT o.*, a.province, a.district, a.area_type,
              s.store_name, s.address as pickup_address, s.phone as pickup_phone,
-             st.service_name
+             sh.shop_name, u.phone as sender_phone,
+             st.service_name,
+             e.full_name as shipper_name
       FROM orders o
       JOIN areas a ON o.id_dest_area = a.id_area
       JOIN stores s ON o.id_store = s.id_store
+      JOIN shops sh ON s.id_shop = sh.id_shop
+      JOIN users u ON sh.id_user = u.id_user
       LEFT JOIN service_types st ON o.id_service_type = st.id_service
+      LEFT JOIN employees e ON e.id_user = o.current_shipper_id
       WHERE o.tracking_code = $1
     `, [tracking_code]);
 
     if (!orderResult.rows[0]) return null;
 
     const logs = await pool.query(`
-      SELECT ol.action, ol.created_at, ol.evidence_url,
+      SELECT ol.id_log, ol.action, ol.created_at, ol.evidence_url,
              l.location_name, l.location_type,
              u.phone as actor_phone
       FROM order_logs ol
@@ -223,7 +215,18 @@ export class OrderRepository {
       ORDER BY ol.created_at ASC
     `, [orderResult.rows[0].id_order]);
 
-    return { order: orderResult.rows[0], timeline: logs.rows };
+    const order = orderResult.rows[0];
+    const timeline = logs.rows.map((log: any) => {
+      if (log.action === 'TAO DON') {
+        return { ...log, location_name: null, location_type: null };
+      }
+      if (log.action === 'LAY HANG THANH CONG') {
+        return { ...log, location_name: order.pickup_address, location_type: 'SHOP_ADDRESS' };
+      }
+      return log;
+    });
+
+    return { order, timeline };
   }
 
   // Lấy Pool Client cho Transaction

@@ -212,6 +212,66 @@ export class StockkeeperRepository {
     return result.rows;
   }
 
+  async getBagsForWarehouse(id_hub: number | null, id_spoke: number | null) {
+    const bagsResult = await pool.query(
+      `
+      SELECT b.id_bag,
+             b.bag_code,
+             b.origin_hub_id,
+             origin_hub.hub_name as origin_hub_name,
+             b.dest_hub_id,
+             dest_hub.hub_name as dest_hub_name,
+             b.dest_spoke_id,
+             dest_spoke.spoke_name as dest_spoke_name,
+             b.status,
+             COUNT(bi.id_order)::int as item_count
+      FROM bags b
+      LEFT JOIN hubs origin_hub ON origin_hub.id_hub = b.origin_hub_id
+      LEFT JOIN hubs dest_hub ON dest_hub.id_hub = b.dest_hub_id
+      LEFT JOIN spokes dest_spoke ON dest_spoke.id_spoke = b.dest_spoke_id
+      LEFT JOIN bag_items bi ON bi.id_bag = b.id_bag
+      WHERE ($1::int IS NOT NULL AND (b.origin_hub_id = $1 OR b.dest_hub_id = $1))
+         OR ($2::int IS NOT NULL AND b.dest_spoke_id = $2)
+      GROUP BY b.id_bag, origin_hub.hub_name, dest_hub.hub_name, dest_spoke.spoke_name
+      ORDER BY b.id_bag DESC
+      LIMIT 50
+      `,
+      [id_hub, id_spoke]
+    );
+
+    const bags = bagsResult.rows;
+    if (!bags.length) return [];
+
+    const itemResult = await pool.query(
+      `
+      SELECT bi.id_bag,
+             o.id_order,
+             o.tracking_code,
+             o.receiver_name,
+             o.status,
+             a.province,
+             a.district
+      FROM bag_items bi
+      JOIN orders o ON o.id_order = bi.id_order
+      LEFT JOIN areas a ON a.id_area = o.id_dest_area
+      WHERE bi.id_bag = ANY($1::int[])
+      ORDER BY bi.id_bag DESC, o.id_order ASC
+      `,
+      [bags.map((bag: any) => bag.id_bag)]
+    );
+
+    const itemsByBag = itemResult.rows.reduce((acc: Record<number, any[]>, item: any) => {
+      acc[item.id_bag] = acc[item.id_bag] || [];
+      acc[item.id_bag].push(item);
+      return acc;
+    }, {});
+
+    return bags.map((bag: any) => ({
+      ...bag,
+      items: itemsByBag[bag.id_bag] || [],
+    }));
+  }
+
   async createBag(
     origin_hub_id: number | null,
     dest_hub_id: number | null,

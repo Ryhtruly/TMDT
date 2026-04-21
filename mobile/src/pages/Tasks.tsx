@@ -209,7 +209,7 @@ const Tasks = () => {
               <div className="task-retry-note">
                 <FiAlertCircle size={11} />
                 Lần giao thứ {attemptNo + 1}
-                {attemptNo >= 3 && ' · ⚠️ Tính phí giao lại'}
+                {attemptNo >= 3 && ' · ⚠️ Shop bị tính phí giao lại'}
               </div>
             )}
           </div>
