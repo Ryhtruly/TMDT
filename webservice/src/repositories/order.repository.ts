@@ -216,6 +216,52 @@ export class OrderRepository {
     `, [orderResult.rows[0].id_order]);
 
     const order = orderResult.rows[0];
+    const originArea = await this.findOriginAreaByStore(order.id_store);
+    const routePlanResult = await pool.query(
+      `
+      SELECT
+        dest_area.id_area as dest_area_id,
+        dest_area.province as dest_province,
+        dest_area.district as dest_district,
+        dest_sp.id_spoke as dest_spoke_id,
+        dest_sp.spoke_name as dest_spoke_name,
+        dest_h.id_hub as dest_hub_id,
+        dest_h.hub_name as dest_hub_name,
+        origin_sp.id_spoke as origin_spoke_id,
+        origin_sp.spoke_name as origin_spoke_name,
+        origin_h.id_hub as origin_hub_id,
+        origin_h.hub_name as origin_hub_name
+      FROM areas dest_area
+      LEFT JOIN spokes dest_sp ON dest_sp.id_spoke = dest_area.id_spoke
+      LEFT JOIN hubs dest_h ON dest_h.id_hub = dest_sp.id_hub
+      LEFT JOIN areas origin_area ON origin_area.id_area = $2
+      LEFT JOIN spokes origin_sp ON origin_sp.id_spoke = origin_area.id_spoke
+      LEFT JOIN hubs origin_h ON origin_h.id_hub = origin_sp.id_hub
+      WHERE dest_area.id_area = $1
+      LIMIT 1
+      `,
+      [order.id_dest_area, originArea?.id_area || null]
+    );
+    const routePlan = routePlanResult.rows[0]
+      ? {
+          origin: {
+            province: originArea?.province || null,
+            district: originArea?.district || null,
+            spoke_id: routePlanResult.rows[0].origin_spoke_id,
+            spoke_name: routePlanResult.rows[0].origin_spoke_name,
+            hub_id: routePlanResult.rows[0].origin_hub_id,
+            hub_name: routePlanResult.rows[0].origin_hub_name,
+          },
+          destination: {
+            province: routePlanResult.rows[0].dest_province,
+            district: routePlanResult.rows[0].dest_district,
+            spoke_id: routePlanResult.rows[0].dest_spoke_id,
+            spoke_name: routePlanResult.rows[0].dest_spoke_name,
+            hub_id: routePlanResult.rows[0].dest_hub_id,
+            hub_name: routePlanResult.rows[0].dest_hub_name,
+          },
+        }
+      : null;
     const timeline = logs.rows.map((log: any) => {
       if (log.action === 'TAO DON') {
         return { ...log, location_name: null, location_type: null };
@@ -226,7 +272,7 @@ export class OrderRepository {
       return log;
     });
 
-    return { order, timeline };
+    return { order: { ...order, route_plan: routePlan }, timeline, route_plan: routePlan };
   }
 
   // Lấy Pool Client cho Transaction

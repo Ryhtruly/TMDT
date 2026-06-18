@@ -13,11 +13,13 @@ type TabType = 'pickup' | 'delivery';
 interface Order {
   id_order: number;
   tracking_code: string;
+  is_p2p_broadcast?: boolean;
   receiver_name: string;
   receiver_phone: string;
   receiver_address: string;
   cod_amount: number | string;
   status: string;
+  current_shipper_id?: number | null;
   weight: number;
   item_value?: number | string;
   store_name?: string;
@@ -26,7 +28,25 @@ interface Order {
   district?: string;
   attempt_count?: number;
   created_at?: string;
+  dest_spoke_name?: string;
+  dest_hub_name?: string;
 }
+
+const ORDER_STATUS = {
+  WAITING_PICKUP: '\u0043\u0048\u1edc \u004c\u1ea4\u0059 \u0048\u00c0\u004e\u0047',
+  PICKED_UP: '\u0110\u00c3 \u004c\u1ea4\u0059 \u0048\u00c0\u004e\u0047',
+  IN_TRANSIT: '\u0110\u0041\u004e\u0047 \u0054\u0052\u0055\u004e\u0047 \u0043\u0048\u0055\u0059\u1ec2\u004e',
+  AT_WAREHOUSE: '\u0054\u1ea0\u0049 \u004b\u0048\u004f',
+  INBOUND_WAREHOUSE: '\u004e\u0048\u1eac\u0050 \u004b\u0048\u004f',
+  DELIVERING: '\u0110\u0041\u004e\u0047 \u0047\u0049\u0041\u004f',
+  DELIVERED: '\u0047\u0049\u0041\u004f \u0054\u0048\u00c0\u004e\u0048 \u0043\u00d4\u004e\u0047',
+  DELIVERY_FAILED: '\u0047\u0049\u0041\u004f \u0054\u0048\u1ea4\u0054 \u0042\u1ea0\u0049',
+};
+
+const mojibakeOnce = (value: string) => unescape(encodeURIComponent(value));
+const statusVariants = (status: string) => Array.from(new Set([status, mojibakeOnce(status), mojibakeOnce(mojibakeOnce(status))]));
+const statusIs = (actual: string, canonical: string) => statusVariants(canonical).includes(String(actual || ''));
+const statusIn = (actual: string, canonicals: string[]) => canonicals.some(status => statusIs(actual, status));
 
 const STATUS_MAP: Record<string, { text: string; cls: string; color: string }> = {
   'CHỜ LẤY HÀNG':   { text: 'Chờ lấy', cls: 'badge-waiting',  color: '#f59e0b' },
@@ -95,6 +115,60 @@ const Tasks = () => {
     window.location.href = `/scan?code=${code}&mode=${mode}`;
   };
 
+  const acceptP2p = async (code: string) => {
+    try {
+      setLoading(true);
+      await api.post('/shipper/p2p/accept', { tracking_code: code });
+      alert('Nhận cuốc hỏa tốc thành công! Vui lòng tới điểm gửi để lấy hàng.');
+      fetchTasks();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Có lỗi xảy ra khi nhận cuốc.');
+      setLoading(false);
+    }
+  };
+
+  const acceptPickup = async (code: string) => {
+    try {
+      setLoading(true);
+      await api.post('/shipper/pickup/accept', { tracking_code: code });
+      alert('Nhan don thanh cong. Don nay da khoa cho ban, shipper khac se khong the nhan.');
+      fetchTasks();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Co loi xay ra khi nhan don.');
+      setLoading(false);
+    }
+  };
+
+  const renderRouteSteps = (order: Order, type: TabType) => {
+    const pickupDone = type === 'delivery' || !statusIs(order.status, ORDER_STATUS.WAITING_PICKUP);
+    const inWarehouse = statusIn(order.status, [ORDER_STATUS.AT_WAREHOUSE, ORDER_STATUS.INBOUND_WAREHOUSE, ORDER_STATUS.IN_TRANSIT]) || order.status === 'T?I KHO';
+    const delivering = statusIn(order.status, [ORDER_STATUS.PICKED_UP, ORDER_STATUS.DELIVERING, ORDER_STATUS.DELIVERY_FAILED]) || type === 'delivery';
+    const done = statusIs(order.status, ORDER_STATUS.DELIVERED);
+    const steps = type === 'pickup'
+      ? [
+          { label: 'Nhan don', active: !!order.current_shipper_id || pickupDone },
+          { label: 'Toi shop', active: !!order.current_shipper_id },
+          { label: 'Quet lay', active: pickupDone },
+        ]
+      : [
+          { label: 'Tai kho', active: inWarehouse || delivering || done },
+          { label: 'Dang giao', active: delivering || done },
+          { label: 'Hoan tat', active: done },
+        ];
+
+    return (
+      <div className="task-route-steps">
+        {steps.map((step, index) => (
+          <div className={`task-route-step${step.active ? ' active' : ''}`} key={step.label}>
+            <span className="task-route-dot" />
+            <span className="task-route-label">{step.label}</span>
+            {index < steps.length - 1 && <span className="task-route-line" />}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   // Filtered lists
   const filteredPickups = useMemo(() => {
     let list = pickups;
@@ -123,8 +197,8 @@ const Tasks = () => {
     return list;
   }, [deliveries, search, filterCod]);
 
-  const inTransit = filteredDeliveries.filter(o => ['ĐÃ LẤY HÀNG', 'ĐANG GIAO'].includes(o.status));
-  const toRedeliver = filteredDeliveries.filter(o => o.status === 'GIAO THẤT BẠI');
+  const inTransit = filteredDeliveries.filter(o => statusIn(o.status, [ORDER_STATUS.PICKED_UP, ORDER_STATUS.DELIVERING]));
+  const toRedeliver = filteredDeliveries.filter(o => statusIs(o.status, ORDER_STATUS.DELIVERY_FAILED));
 
   const renderPickupCard = (order: Order) => {
     const hasCod = Number(order.cod_amount) > 0;
@@ -140,6 +214,7 @@ const Tasks = () => {
           </div>
           <div className="task-header-right">
             {isUrgent && <span className="task-urgent-badge">💰 Ưu tiên</span>}
+            {order.is_p2p_broadcast && <span className="task-urgent-badge" style={{backgroundColor: '#ea580c', color: '#fff'}}>🔥 HỎA TỐC</span >}
             <span className={`badge ${STATUS_MAP[order.status]?.cls || 'badge-waiting'}`}>
               {STATUS_MAP[order.status]?.text || order.status}
             </span>
@@ -176,17 +251,32 @@ const Tasks = () => {
           )}
         </div>
 
+        {renderRouteSteps(order, 'pickup')}
+
         {/* Actions */}
         <div className="task-actions">
-          <button className="task-btn task-btn-call" onClick={() => callPhone(order.receiver_phone)}>
-            <FiPhone size={14} /> Gọi Shop
-          </button>
-          <button className="task-btn task-btn-map" onClick={() => openMaps(order.pickup_address || order.receiver_address)}>
-            <FiNavigation size={14} /> Chỉ đường
-          </button>
-          <button className="task-btn task-btn-scan" onClick={() => scanOrder(order.tracking_code, 'pickup')}>
-            <FiChevronRight size={14} /> Quét lấy
-          </button>
+          {order.is_p2p_broadcast ? (
+            <button className="task-btn task-btn-map" style={{ width: '100%', backgroundColor: '#ea580c', color: '#fff', fontWeight: 'bold' }} onClick={() => acceptP2p(order.tracking_code)}>
+              🔥 Nhận Cuốc Hỏa Tốc
+            </button>
+          ) : (
+            <>
+              {!order.current_shipper_id && (
+                <button className="task-btn task-btn-accept" onClick={() => acceptPickup(order.tracking_code)}>
+                  Nhan don
+                </button>
+              )}
+              <button className="task-btn task-btn-call" onClick={() => callPhone(order.receiver_phone)}>
+                <FiPhone size={14} /> Gọi Shop
+              </button>
+              <button className="task-btn task-btn-map" onClick={() => openMaps(order.pickup_address || order.receiver_address)}>
+                <FiNavigation size={14} /> Chỉ đường
+              </button>
+              <button className="task-btn task-btn-scan" onClick={() => scanOrder(order.tracking_code, 'pickup')}>
+                <FiChevronRight size={14} /> Quét lấy
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -194,7 +284,7 @@ const Tasks = () => {
 
   const renderDeliveryCard = (order: Order) => {
     const hasCod = Number(order.cod_amount) > 0;
-    const isRetry = order.status === 'GIAO THẤT BẠI';
+    const isRetry = statusIs(order.status, ORDER_STATUS.DELIVERY_FAILED);
     const attemptNo = Number(order.attempt_count || 0);
 
     return (
@@ -249,6 +339,8 @@ const Tasks = () => {
             </span>
           )}
         </div>
+
+        {renderRouteSteps(order, 'delivery')}
 
         {/* Actions */}
         <div className="task-actions">

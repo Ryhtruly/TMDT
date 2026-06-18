@@ -12,9 +12,9 @@ export const pool = new Pool({
 });
 
 pool.on('connect', () => {
-  console.log('✅ Đã kết nối thành công tới PostgreSQL (QLKV)');
+  console.log('Đã kết nối thành công tới PostgreSQL (QLKV)');
 });
 
 pool.on('error', (err) => {
-  console.error('❌ Lỗi mất kết nối PostgreSQL:', err);
+  console.error('Lỗi mất kết nối PostgreSQL:', err);
 });

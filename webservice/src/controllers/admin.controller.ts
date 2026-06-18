@@ -342,12 +342,65 @@ export const getOrderDetailByTracking = async (req: Request, res: Response): Pro
   }
 };
 
-// Bật/Tắt tuyến đường (Admin)
 export const toggleRoute = async (req: Request, res: Response): Promise<void> => {
   try {
     const id_route = parseInt(String(req.params.id));
     const data = await adminService.toggleRoute(id_route);
     res.json({ status: 'success', ...data });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+export const assignSpokeToHub = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id_hub = parseInt(String(req.params.id));
+    const id_spoke = parseInt(String(req.params.id_spoke));
+    await adminService.assignSpokeToHub(id_hub, id_spoke);
+    res.json({ status: 'success', message: 'Gán Spoke vào Hub thành công!' });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+export const unassignSpokeFromHub = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id_hub = parseInt(String(req.params.id));
+    const id_spoke = parseInt(String(req.params.id_spoke));
+    await adminService.unassignSpokeFromHub(id_hub, id_spoke);
+    res.json({ status: 'success', message: 'Gỡ Spoke khỏi Hub thành công!' });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+export const assignAreaToSpoke = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id_spoke = parseInt(String(req.params.id));
+    const id_area = parseInt(String(req.params.id_area));
+    await adminService.assignAreaToSpoke(id_spoke, id_area);
+    res.json({ status: 'success', message: 'Gán Khu vực vào Spoke thành công!' });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+export const unassignAreaFromSpoke = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id_spoke = parseInt(String(req.params.id));
+    const id_area = parseInt(String(req.params.id_area));
+    await adminService.unassignAreaFromSpoke(id_spoke, id_area);
+    res.json({ status: 'success', message: 'Gỡ Khu vực khỏi Spoke thành công!' });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+export const completeReturn = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id_order = parseInt(String(req.params.id));
+    const data = await adminService.completeReturn(id_order);
+    res.json({ status: 'success', data });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
   }

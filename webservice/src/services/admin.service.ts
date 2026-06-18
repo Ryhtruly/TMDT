@@ -4,6 +4,17 @@ import { assertValidVietnamPhone } from '../utils/phone';
 
 const adminRepo = new AdminRepository();
 
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
 export class AdminService {
   async getDashboard() {
     return await adminRepo.getDashboardCounts();
@@ -18,7 +29,7 @@ export class AdminService {
 
   async createEmployee(employeeData: any) {
     const { phone, password, email, citizen_id, full_name, gender, dob, home_address, id_role, id_hub, id_spoke } = employeeData;
-    
+
     if (!phone || !password || !full_name || !email || !citizen_id || !id_role) {
       throw new Error('Thiếu tham số bắt buộc.');
     }
@@ -70,7 +81,7 @@ export class AdminService {
     const client = await adminRepo.getTxClient();
     try {
       await client.query('BEGIN');
-      
+
       const locRes = await client.query(
         'INSERT INTO locations (location_type, location_name, address, latitude, longitude) VALUES ($1, $2, $3, $4, $5) RETURNING id_location',
         ['HUB', hubData.location_name, hubData.address, hubData.latitude, hubData.longitude]
@@ -93,11 +104,11 @@ export class AdminService {
   }
 
   // --- MỞ RỘNG BƯU CỤC CON (SPOKE) ---
-  async createSpoke(spokeData: { id_hub: number, spoke_name: string, location_name: string, address: string, latitude: number, longitude: number }) {
+  async createSpoke(spokeData: { id_hub?: number, spoke_name: string, location_name: string, address: string, latitude: number, longitude: number }) {
     const client = await adminRepo.getTxClient();
     try {
       await client.query('BEGIN');
-      
+
       const locRes = await client.query(
         'INSERT INTO locations (location_type, location_name, address, latitude, longitude) VALUES ($1, $2, $3, $4, $5) RETURNING id_location',
         ['SPOKE', spokeData.location_name, spokeData.address, spokeData.latitude, spokeData.longitude]
@@ -106,7 +117,7 @@ export class AdminService {
 
       const spokeRes = await client.query(
         'INSERT INTO spokes (id_hub, id_location, spoke_name) VALUES ($1, $2, $3) RETURNING id_spoke',
-        [spokeData.id_hub, id_location, spokeData.spoke_name]
+        [spokeData.id_hub || null, id_location, spokeData.spoke_name]
       );
 
       await client.query('COMMIT');
@@ -120,17 +131,129 @@ export class AdminService {
   }
 
   // --- QUY HOẠCH VÙNG LÃNH THỔ CỦA BƯU CỤC ---
-  async setAreaCoverage(areaData: { id_spoke: number, province: string, district: string, area_type: string }) {
+  async setAreaCoverage(areaData: { id_spoke?: number, province: string, district: string, area_type: string }) {
     const client = await adminRepo.getTxClient();
     try {
       const result = await client.query(
         'INSERT INTO areas (id_spoke, province, district, area_type) VALUES ($1, $2, $3, $4) RETURNING *',
-        [areaData.id_spoke, areaData.province, areaData.district, areaData.area_type]
+        [areaData.id_spoke || null, areaData.province, areaData.district, areaData.area_type]
       );
       return result.rows[0];
     } catch (error: any) {
       if (error.code === '23505') throw new Error('Quận/Huyện này đã bị Bưu cục khác quản lý (Lỗi Unique Constraint Zone)!');
       throw new Error('Không thể phân vùng khu vực này.');
+    } finally {
+      client.release();
+    }
+  }
+
+  async assignSpokeToHub(id_hub: number, id_spoke: number) {
+    const client = await adminRepo.getTxClient();
+    try {
+      const hubRes = await client.query(`
+        SELECT l.latitude, l.longitude, h.hub_name
+        FROM hubs h JOIN locations l ON h.id_location = l.id_location
+        WHERE h.id_hub = $1
+      `, [id_hub]);
+      if (!hubRes.rows[0]) throw new Error('Khong tim thay Hub');
+
+      const spokeRes = await client.query(`
+        SELECT s.id_hub, l.latitude, l.longitude, s.spoke_name
+        FROM spokes s JOIN locations l ON s.id_location = l.id_location
+        WHERE s.id_spoke = $1
+      `, [id_spoke]);
+      if (!spokeRes.rows[0]) throw new Error('Khong tim thay Spoke');
+
+      if (spokeRes.rows[0].id_hub) throw new Error('Spoke này đã có Hub chủ quản. Phải gỡ khỏi Hub cũ trước.');
+
+      const dist = getDistance(hubRes.rows[0].latitude, hubRes.rows[0].longitude, spokeRes.rows[0].latitude, spokeRes.rows[0].longitude);
+      if (dist > 150) throw new Error(`Khoảng cách quá xa (${Math.round(dist)}km > 150km). Spoke "${spokeRes.rows[0].spoke_name}" không thể vào Hub "${hubRes.rows[0].hub_name}"!`);
+
+      await client.query('UPDATE spokes SET id_hub = $1 WHERE id_spoke = $2', [id_hub, id_spoke]);
+      return true;
+    } finally {
+      client.release();
+    }
+  }
+
+  async unassignSpokeFromHub(id_hub: number, id_spoke: number) {
+    const client = await adminRepo.getTxClient();
+    try {
+      await client.query('UPDATE spokes SET id_hub = NULL WHERE id_spoke = $1 AND id_hub = $2', [id_spoke, id_hub]);
+      return true;
+    } finally {
+      client.release();
+    }
+  }
+
+  async assignAreaToSpoke(id_spoke: number, id_area: number) {
+    const client = await adminRepo.getTxClient();
+    try {
+      // Check area exists and is orphan
+      const areaRes = await client.query('SELECT id_spoke, province, district FROM areas WHERE id_area = $1', [id_area]);
+      if (!areaRes.rows[0]) throw new Error('Khong tim thay Khu vuc (Area)');
+      if (areaRes.rows[0].id_spoke) throw new Error('Khu vuc nay da co Spoke quan ly. Phai go khoi Spoke cu truoc.');
+
+      const newProvince = String(areaRes.rows[0].province || '').trim();
+      const newDistrict = String(areaRes.rows[0].district || '').trim();
+
+      // Check province compatibility: new area must not be from a completely different region
+      const existingAreas = await client.query(
+        'SELECT DISTINCT province FROM areas WHERE id_spoke = $1',
+        [id_spoke]
+      );
+      if (existingAreas.rows.length > 0) {
+        const existingProvinces: string[] = existingAreas.rows.map((r: any) => String(r.province || '').trim());
+        // Define regional groups (simplified)
+        const hcmRegion = ['Ho Chi Minh', 'TP.HCM', 'Ho Chi Minh City', 'Binh Duong', 'Dong Nai', 'Long An', 'Ba Ria', 'Tay Ninh', 'Binh Phuoc'];
+        const hnRegion = ['Ha Noi', 'Hanoi', 'Bac Ninh', 'Hung Yen', 'Ha Nam', 'Vinh Phuc', 'Ha Dong', 'Bac Giang', 'Thai Nguyen', 'Hai Phong', 'Nam Dinh', 'Ninh Binh'];
+        const dnRegion = ['Da Nang', 'Quang Nam', 'Thua Thien', 'Quang Ngai'];
+
+        const getRegion = (province: string) => {
+          const p = province.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          if (hcmRegion.some(r => p.includes(r.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')))) return 'HCM';
+          if (hnRegion.some(r => p.includes(r.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')))) return 'HN';
+          if (dnRegion.some(r => p.includes(r.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')))) return 'DN';
+          return p.substring(0, 6); // fallback: first 6 chars as region key
+        };
+
+        const newRegion = getRegion(newProvince);
+        const hasConflict = existingProvinces.some(ep => {
+          const existingRegion = getRegion(ep);
+          // Only block if clearly different named regions
+          return newRegion !== existingRegion &&
+            newRegion !== ep.substring(0, 6) &&
+            !['HCM', 'HN', 'DN'].includes(newRegion) === false;
+        });
+
+        // Strict check: if new province is HCM-region and existing is HN-region (or vice versa), block
+        const newR = getRegion(newProvince);
+        const conflictingRegion = existingProvinces.some(ep => {
+          const er = getRegion(ep);
+          return (newR === 'HCM' && er === 'HN') || (newR === 'HN' && er === 'HCM') ||
+                 (newR === 'HCM' && er === 'DN') || (newR === 'DN' && er === 'HCM') ||
+                 (newR === 'HN' && er === 'DN') || (newR === 'DN' && er === 'HN');
+        });
+
+        if (conflictingRegion) {
+          throw new Error(
+            `Xung dot vung dia ly! Khu vuc "${newDistrict} (${newProvince})" thuoc vung khac voi cac khu vuc hien tai cua Buu cuc nay.`
+          );
+        }
+      }
+
+      await client.query('UPDATE areas SET id_spoke = $1 WHERE id_area = $2', [id_spoke, id_area]);
+      return true;
+    } finally {
+      client.release();
+    }
+  }
+
+  async unassignAreaFromSpoke(id_spoke: number, id_area: number) {
+    const client = await adminRepo.getTxClient();
+    try {
+      await client.query('UPDATE areas SET id_spoke = NULL WHERE id_area = $1 AND id_spoke = $2', [id_area, id_spoke]);
+      return true;
     } finally {
       client.release();
     }
@@ -402,6 +525,39 @@ export class AdminService {
       is_active: newStatus,
       message: newStatus ? 'Đã kích hoạt tuyến đường.' : 'Đã vô hiệu hóa tuyến đường.'
     };
+  }
+
+  // --- HOÀN HÀNG ---
+  async completeReturn(id_order: number) {
+    const client = await adminRepo.getTxClient();
+    try {
+      await client.query('BEGIN');
+      const orderRes = await client.query('SELECT status FROM orders WHERE id_order = $1 FOR UPDATE', [id_order]);
+      if (!orderRes.rows[0]) throw new Error('Không tìm thấy đơn hàng.');
+
+      const { status } = orderRes.rows[0];
+      const { ORDER_STATUS } = require('../utils/orderStatus');
+
+      if (status !== ORDER_STATUS.RETURNED && status !== ORDER_STATUS.RETURNING) {
+        throw new Error(`Chỉ có thể xác nhận trả shop khi đơn ở trạng thái Hoàn hàng. Hiện tại: ${status}`);
+      }
+
+      await client.query('UPDATE orders SET status = $1 WHERE id_order = $2', [ORDER_STATUS.RETURN_COMPLETED, id_order]);
+
+      // Ghi log
+      await client.query(`
+        INSERT INTO order_logs (id_order, action)
+        VALUES ($1, 'XÁC NHẬN ĐÃ TRẢ SHOP')
+      `, [id_order]);
+
+      await client.query('COMMIT');
+      return { id_order, status: ORDER_STATUS.RETURN_COMPLETED, message: 'Xác nhận đã trả shop thành công.' };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
 }

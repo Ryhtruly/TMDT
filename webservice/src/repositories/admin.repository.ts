@@ -13,13 +13,13 @@ export class AdminRepository {
       SELECT s.*, h.hub_name,
         COALESCE(
           JSON_AGG(
-            JSON_BUILD_OBJECT('district', a.district, 'province', a.province, 'area_type', a.area_type)
+            JSON_BUILD_OBJECT('id_area', a.id_area, 'district', a.district, 'province', a.province, 'area_type', a.area_type)
             ORDER BY a.district
           ) FILTER (WHERE a.id_area IS NOT NULL),
           '[]'
         ) AS areas
       FROM spokes s 
-      JOIN hubs h ON s.id_hub = h.id_hub
+      LEFT JOIN hubs h ON s.id_hub = h.id_hub
       LEFT JOIN areas a ON a.id_spoke = s.id_spoke
       GROUP BY s.id_spoke, s.id_hub, s.id_location, s.spoke_name, h.hub_name
       ORDER BY s.id_spoke ASC

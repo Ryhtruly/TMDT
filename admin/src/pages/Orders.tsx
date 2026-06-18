@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { FiSearch, FiFilter, FiX, FiPackage, FiMapPin, FiClock, FiUser, FiPhone, FiTruck } from 'react-icons/fi';
 import apiClient from '../api/client';
 
-const STATUS_OPTIONS = ['', 'CHỜ LẤY HÀNG', 'ĐANG LẤY', 'ĐANG GIAO', 'GIAO THÀNH CÔNG', 'GIAO THẤT BẠI', 'HOÀN HÀNG', 'ĐÃ HỦY'];
+const STATUS_OPTIONS = ['', 'CHỜ LẤY HÀNG', 'ĐANG LẤY', 'ĐANG GIAO', 'GIAO THÀNH CÔNG', 'GIAO THẤT BẠI', 'HOÀN HÀNG', 'ĐÃ TRẢ SHOP', 'ĐÃ HỦY'];
 
 const statusStyle: Record<string, { bg: string; color: string }> = {
   'CHỜ LẤY HÀNG':     { bg: '#dbeafe', color: '#1d4ed8' },
@@ -11,6 +11,7 @@ const statusStyle: Record<string, { bg: string; color: string }> = {
   'GIAO THÀNH CÔNG':  { bg: '#d1fae5', color: '#047857' },
   'GIAO THẤT BẠI':    { bg: '#fee2e2', color: '#b91c1c' },
   'HOÀN HÀNG':        { bg: '#fef9c3', color: '#854d0e' },
+  'ĐÃ TRẢ SHOP':      { bg: '#e0f2fe', color: '#0369a1' },
   'ĐÃ HỦY':           { bg: '#f3f4f6', color: '#6b7280' },
 };
 
@@ -60,13 +61,52 @@ const OrderDetailModal = ({ trackingCode, onClose }: { trackingCode: string; onC
 
           {detail && (<>
             {/* Status */}
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
               {(() => { const s = statusStyle[detail.status] || { bg: '#f3f4f6', color: '#374151' }; return (
                 <span style={{ background: s.bg, color: s.color, padding: '6px 18px', borderRadius: '20px', fontWeight: 700, fontSize: '0.95rem' }}>
                   {detail.status}
                 </span>
               ); })()}
+              {(detail.status === 'HOÀN HÀNG' || detail.status === 'ĐANG HOÀN') && (
+                <button
+                  onClick={async () => {
+                    if (!window.confirm('Xác nhận đã trả hàng lại cho Shop?')) return;
+                    try {
+                      await apiClient.post(`/admin/returns/${detail.id_order}/complete`);
+                      alert('Cập nhật thành công!');
+                      const res = await apiClient.get(`/admin/orders/${trackingCode}/detail`);
+                      const payload = res?.data || null;
+                      const order = payload?.order || payload;
+                      setDetail(order ? { ...order, logs: payload?.timeline || payload?.logs || [] } : null);
+                    } catch (err: any) {
+                      alert(err?.response?.data?.message || 'Lỗi cập nhật!');
+                    }
+                  }}
+                  style={{ padding: '8px 16px', background: '#0284c7', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Xác nhận đã trả Shop
+                </button>
+              )}
             </div>
+
+            {detail.route_plan && (
+              <div style={{ background: '#eef6ff', border: '1px solid #dbeafe', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', marginBottom: 8 }}>Tuyen duong don hang</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 800, color: '#1e293b' }}>{detail.route_plan.origin?.spoke_name || 'Diem lay hang'}</div>
+                    <div style={{ fontSize: '0.82rem', color: '#64748b' }}>{detail.route_plan.origin?.hub_name || 'Chua map hub'} · {detail.route_plan.origin?.district || ''}, {detail.route_plan.origin?.province || ''}</div>
+                  </div>
+                  <div style={{ width: 42, height: 2, background: '#2563eb', position: 'relative' }}>
+                    <span style={{ position: 'absolute', right: -2, top: -4, width: 10, height: 10, borderTop: '2px solid #2563eb', borderRight: '2px solid #2563eb', transform: 'rotate(45deg)' }} />
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 800, color: '#1e293b' }}>{detail.route_plan.destination?.spoke_name || 'Diem giao hang'}</div>
+                    <div style={{ fontSize: '0.82rem', color: '#64748b' }}>{detail.route_plan.destination?.hub_name || 'Chua map hub'} · {detail.route_plan.destination?.district || ''}, {detail.route_plan.destination?.province || ''}</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               {/* Sender */}

@@ -419,6 +419,64 @@
   color: var(--slate-600);
 }
 
+.task-route-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 0;
+  padding: 8px 2px 2px;
+}
+
+.task-route-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  color: var(--slate-400);
+}
+
+.task-route-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--slate-200);
+  border: 2px solid white;
+  box-shadow: 0 0 0 1.5px var(--slate-200);
+  z-index: 1;
+}
+
+.task-route-line {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--slate-200);
+}
+
+.task-route-label {
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
+}
+
+.task-route-step.active {
+  color: var(--primary);
+}
+
+.task-route-step.active .task-route-dot {
+  background: var(--primary);
+  box-shadow: 0 0 0 1.5px rgba(242,101,34,0.35), 0 0 0 5px rgba(242,101,34,0.1);
+}
+
+.task-route-step.active .task-route-line {
+  background: var(--primary);
+}
+
 /* Action buttons */
 .task-actions {
   display: flex;
@@ -461,3 +519,10 @@
   color: white;
 }
 .task-btn-scan:hover { background: var(--slate-900); }
+
+.task-btn-accept {
+  background: #ecfdf5;
+  border: 1.5px solid rgba(16,185,129,0.25);
+  color: #047857;
+}
+.task-btn-accept:hover { background: #d1fae5; }

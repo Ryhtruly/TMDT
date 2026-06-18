@@ -1,4 +1,5 @@
 import { ShipperRepository } from '../repositories/shipper.repository';
+import { DELIVERY_ATTEMPT_RESULT, ORDER_STATUS, orderStatusEquals, orderStatusIn } from '../utils/orderStatus';
 
 const shipperRepo = new ShipperRepository();
 
@@ -78,13 +79,27 @@ export class ShipperService {
         continue;
       }
 
+      const isP2P = order.id_service_type === 3;
+      if (isP2P) {
+        if (!order.current_shipper_id) {
+          orders.push({ ...order, is_p2p_broadcast: true });
+        } else if (Number(order.current_shipper_id) === Number(id_user)) {
+          orders.push({ ...order, is_p2p_broadcast: false });
+        }
+        continue;
+      }
+
       const assignedShipperId = await shipperRepo.resolveAssignedShipperByAddress(
         assignment.id_spoke,
         order.pickup_address || ''
       );
 
+      if (order.current_shipper_id && Number(order.current_shipper_id) !== Number(id_user)) {
+        continue;
+      }
+
       if (!assignedShipperId || Number(assignedShipperId) === Number(id_user)) {
-        orders.push(order);
+        orders.push({ ...order, is_p2p_broadcast: false });
       }
     }
 
@@ -114,7 +129,7 @@ export class ShipperService {
     ]);
 
     const activeDeliveries = deliveryData.orders.filter((order: any) =>
-      ['ĐÃ LẤY HÀNG', 'ĐANG GIAO'].includes(order.status)
+      orderStatusIn(order.status, [ORDER_STATUS.PICKED_UP, ORDER_STATUS.DELIVERING])
     );
 
     return {
@@ -127,6 +142,110 @@ export class ShipperService {
     };
   }
 
+  async acceptPickupOrder(id_user: number, tracking_code: string) {
+    const assignment = await this.getSpokeAssignment(id_user);
+    const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
+    const client = await shipperRepo.getTxClient();
+
+    try {
+      await client.query('BEGIN');
+
+      const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
+      if (!order) throw new Error(`Khong tim thay don hang: ${tracking_code}`);
+      if (!orderStatusEquals(order.status, ORDER_STATUS.WAITING_PICKUP)) {
+        throw new Error(`Khong the nhan don. Don dang o trang thai "${order.status}".`);
+      }
+
+      const originArea = await shipperRepo.resolveSpokeByAddress(order.store_address || '');
+      if (!originArea || Number(originArea.id_spoke) !== Number(assignment.id_spoke)) {
+        throw new Error('Don nay khong thuoc khu vuc lay hang cua ban.');
+      }
+
+      if (order.current_shipper_id) {
+        if (Number(order.current_shipper_id) === Number(id_user)) {
+          throw new Error('Ban da nhan don nay roi.');
+        }
+        throw new Error('Don nay da duoc shipper khac nhan.');
+      }
+
+      if (order.id_service_type !== 3) {
+        const assignedShipperId = await shipperRepo.resolveAssignedShipperByAddress(
+          assignment.id_spoke,
+          order.store_address || ''
+        );
+        if (assignedShipperId && Number(assignedShipperId) !== Number(id_user)) {
+          throw new Error('Don nay da duoc he thong phan cho shipper khac trong khu vuc.');
+        }
+      }
+
+      await shipperRepo.updateCurrentShipper(order.id_order, id_user, client);
+      await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'SHIPPER NHAN DON LAY HANG', null, client);
+
+      await client.query('COMMIT');
+
+      return {
+        tracking_code,
+        status: ORDER_STATUS.WAITING_PICKUP,
+        message: 'Nhan don thanh cong. Hay toi diem gui de lay hang.',
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async acceptP2pOrder(id_user: number, tracking_code: string) {
+    const assignment = await this.getSpokeAssignment(id_user);
+    const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
+    const client = await shipperRepo.getTxClient();
+
+    try {
+      await client.query('BEGIN');
+
+      const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
+      if (!order) throw new Error(`Khong tim thay don hang: ${tracking_code}`);
+
+      if (order.id_service_type !== 3) {
+        throw new Error('Day khong phai la don giao trong ngay (P2P).');
+      }
+
+      if (!orderStatusEquals(order.status, ORDER_STATUS.WAITING_PICKUP)) {
+        throw new Error(`Khong the nhan cuoc. Don dang o trang thai "${order.status}".`);
+      }
+
+      const originArea = await shipperRepo.resolveSpokeByAddress(order.store_address || '');
+      if (!originArea || Number(originArea.id_spoke) !== Number(assignment.id_spoke)) {
+        throw new Error('Don nay khong thuoc khu vuc cua ban.');
+      }
+
+      if (order.current_shipper_id) {
+        if (Number(order.current_shipper_id) === Number(id_user)) {
+          throw new Error('Ban da nhan cuoc nay roi.');
+        } else {
+          throw new Error('Don nay da bi shipper khac nhan mat.');
+        }
+      }
+
+      await shipperRepo.updateCurrentShipper(order.id_order, id_user, client);
+      await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'NHAN CUOC HOA TOC', null, client);
+
+      await client.query('COMMIT');
+
+      return {
+        tracking_code,
+        status: ORDER_STATUS.WAITING_PICKUP,
+        message: 'Nhan cuoc hoa toc thanh cong. Vui long toi lay hang.',
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async confirmPickup(id_user: number, tracking_code: string) {
     const assignment = await this.getSpokeAssignment(id_user);
     const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
@@ -137,10 +256,10 @@ export class ShipperService {
 
       const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
       if (!order) throw new Error(`Khong tim thay don hang: ${tracking_code}`);
-      if (order.status === 'ĐÃ LẤY HÀNG' && order.latest_action === 'XUAT KHO -> GIAO CUOI') {
+      if (orderStatusEquals(order.status, ORDER_STATUS.PICKED_UP) && order.latest_action === 'XUAT KHO -> GIAO CUOI') {
         throw new Error('Don da san sang cho giao cuoi chang. Hay dung chuc nang "Bat dau giao".');
       }
-      if (order.status !== 'CHỜ LẤY HÀNG') {
+      if (!orderStatusEquals(order.status, ORDER_STATUS.WAITING_PICKUP)) {
         throw new Error(`Khong the lay hang. Don dang o trang thai "${order.status}".`);
       }
 
@@ -148,17 +267,27 @@ export class ShipperService {
       if (!originArea || Number(originArea.id_spoke) !== Number(assignment.id_spoke)) {
         throw new Error('Don nay khong thuoc khu vuc lay hang cua ban.');
       }
-
-      const assignedShipperId = await shipperRepo.resolveAssignedShipperByAddress(
-        assignment.id_spoke,
-        order.store_address || ''
-      );
-      if (assignedShipperId && Number(assignedShipperId) !== Number(id_user)) {
-        throw new Error('Don nay da duoc he thong phan cho shipper khac trong khu vuc.');
+      if (order.current_shipper_id && Number(order.current_shipper_id) !== Number(id_user)) {
+        throw new Error('Don nay da duoc shipper khac nhan.');
       }
 
-      await shipperRepo.updateOrderStatus(order.id_order, 'ĐÃ LẤY HÀNG', client);
-      await shipperRepo.updateCurrentShipper(order.id_order, null, client);
+      const isSameDay = order.id_service_type === 3;
+      if (isSameDay) {
+        if (Number(order.current_shipper_id) !== Number(id_user)) {
+          throw new Error('Don hoa toc nay chua duoc ban nhan, hoac da bi shipper khac nhan.');
+        }
+      } else {
+        const assignedShipperId = await shipperRepo.resolveAssignedShipperByAddress(
+          assignment.id_spoke,
+          order.store_address || ''
+        );
+        if (assignedShipperId && Number(assignedShipperId) !== Number(id_user)) {
+          throw new Error('Don nay da duoc he thong phan cho shipper khac trong khu vuc.');
+        }
+      }
+
+      await shipperRepo.updateOrderStatus(order.id_order, ORDER_STATUS.PICKED_UP, client);
+      await shipperRepo.updateCurrentShipper(order.id_order, isSameDay ? id_user : null, client);
       const pickupCashItems = await shipperRepo.markCashCollectionsCollected(order.id_order, 'PICKUP', id_user, client);
       await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'LAY HANG THANH CONG', null, client);
 
@@ -166,7 +295,7 @@ export class ShipperService {
 
       return {
         tracking_code,
-        status: 'ĐÃ LẤY HÀNG',
+        status: ORDER_STATUS.PICKED_UP,
         sender_cash_collected: pickupCashItems.reduce((sum: number, item: any) => sum + Number(item.collected_amount || 0), 0),
         message: pickupCashItems.length > 0
           ? `Xac nhan lay hang thanh cong. Shipper da thu ${pickupCashItems.reduce((sum: number, item: any) => sum + Number(item.collected_amount || 0), 0).toLocaleString('vi-VN')}d phi ship tien mat tu shop.`
@@ -192,9 +321,9 @@ export class ShipperService {
 
       const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
       if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
-      
-      if (order.status !== 'CHỜ LẤY HÀNG') {
-        throw new Error(`Chi co the bao that bai khi don dang o trang thai "CHỜ LẤY HÀNG". Hien tai: "${order.status}".`);
+
+      if (!orderStatusEquals(order.status, ORDER_STATUS.WAITING_PICKUP)) {
+        throw new Error(`Chi co the bao that bai khi don dang o trang thai "CHá»œ Láº¤Y HÃ€NG". Hien tai: "${order.status}".`);
       }
 
       const originArea = await shipperRepo.resolveSpokeByAddress(order.store_address || '');
@@ -202,7 +331,7 @@ export class ShipperService {
         throw new Error('Don nay khong thuoc khu vuc lay hang cua ban.');
       }
 
-      await shipperRepo.updateOrderStatus(order.id_order, 'LẤY HÀNG THẤT BẠI', client);
+      await shipperRepo.updateOrderStatus(order.id_order, ORDER_STATUS.PICKUP_FAILED, client);
       await shipperRepo.updateCurrentShipper(order.id_order, null, client);
       await shipperRepo.insertOrderLog(
         order.id_order,
@@ -217,7 +346,7 @@ export class ShipperService {
 
       return {
         tracking_code,
-        status: 'LẤY HÀNG THẤT BẠI',
+        status: ORDER_STATUS.PICKUP_FAILED,
         message: `Ghi nhan lay hang that bai voi ly do: ${reason_fail}`,
       };
     } catch (error) {
@@ -238,13 +367,14 @@ export class ShipperService {
 
       const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
       if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
-      if (!['ĐÃ LẤY HÀNG', 'GIAO THẤT BẠI'].includes(order.status)) {
+      if (!orderStatusIn(order.status, [ORDER_STATUS.PICKED_UP, ORDER_STATUS.DELIVERY_FAILED])) {
         throw new Error(`Don dang o trang thai "${order.status}", khong the bat dau giao.`);
       }
-      if (order.status === 'ĐÃ LẤY HÀNG' && order.latest_action !== 'XUAT KHO -> GIAO CUOI') {
+      const isSameDay = order.id_service_type === 3;
+      if (orderStatusEquals(order.status, ORDER_STATUS.PICKED_UP) && !isSameDay && order.latest_action !== 'XUAT KHO -> GIAO CUOI') {
         throw new Error('Don chua duoc ban giao cho shipper giao cuoi chang.');
       }
-      if (Number(order.dest_spoke || 0) !== Number(assignment.id_spoke)) {
+      if (!isSameDay && Number(order.dest_spoke || 0) !== Number(assignment.id_spoke)) {
         throw new Error('Don nay khong thuoc khu vuc giao hang cua ban.');
       }
       if (order.current_shipper_id && Number(order.current_shipper_id) !== Number(id_user)) {
@@ -252,14 +382,14 @@ export class ShipperService {
       }
 
       await shipperRepo.updateCurrentShipper(order.id_order, id_user, client);
-      await shipperRepo.updateOrderStatus(order.id_order, 'ĐANG GIAO', client);
+      await shipperRepo.updateOrderStatus(order.id_order, ORDER_STATUS.DELIVERING, client);
       await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'BAT DAU GIAO HANG', null, client);
 
       await client.query('COMMIT');
 
       return {
         tracking_code,
-        status: 'ĐANG GIAO',
+        status: ORDER_STATUS.DELIVERING,
         message: 'Don dang tren duong giao.',
       };
     } catch (error) {
@@ -280,7 +410,7 @@ export class ShipperService {
 
       const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
       if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
-      if (order.status !== 'ĐANG GIAO') {
+      if (!orderStatusEquals(order.status, ORDER_STATUS.DELIVERING)) {
         throw new Error(`Khong the xac nhan giao thanh cong. Don dang o trang thai "${order.status}".`);
       }
       if (Number(order.current_shipper_id || 0) !== Number(id_user)) {
@@ -302,13 +432,13 @@ export class ShipperService {
         order.id_order,
         attemptCount + 1,
         id_user,
-        'THÀNH CÔNG',
+        DELIVERY_ATTEMPT_RESULT.SUCCESS,
         null,
         null,
         evidence_url || null,
         client
       );
-      await shipperRepo.updateOrderStatus(order.id_order, 'GIAO THÀNH CÔNG', client);
+      await shipperRepo.updateOrderStatus(order.id_order, ORDER_STATUS.DELIVERED, client);
       await shipperRepo.updateCurrentShipper(order.id_order, id_user, client);
       await shipperRepo.insertOrderLog(
         order.id_order,
@@ -319,6 +449,9 @@ export class ShipperService {
         client
       );
 
+      // Cộng 1 điểm KPI (Thành công)
+      await shipperRepo.updateShipperPriority(id_user, 1, client);
+
       await client.query('COMMIT');
 
       const parts = [];
@@ -328,7 +461,7 @@ export class ShipperService {
 
       return {
         tracking_code,
-        status: 'GIAO THÀNH CÔNG',
+        status: ORDER_STATUS.DELIVERED,
         collected_cod: deliveryCodAmount || codAmount,
         collected_receiver_fee: receiverFeeAmount,
         total_cash_collected: totalCashCollected,
@@ -355,8 +488,8 @@ export class ShipperService {
 
       const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
       if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
-      if (order.status !== 'ĐANG GIAO') {
-        throw new Error(`Chi co the bao that bai khi don dang o trang thai "ĐANG GIAO". Hien tai: "${order.status}".`);
+      if (!orderStatusEquals(order.status, ORDER_STATUS.DELIVERING)) {
+        throw new Error(`Chi co the bao that bai khi don dang o trang thai "ÄANG GIAO". Hien tai: "${order.status}".`);
       }
       if (Number(order.current_shipper_id || 0) !== Number(id_user)) {
         throw new Error('Don nay khong nam trong danh sach dang giao cua ban.');
@@ -372,7 +505,7 @@ export class ShipperService {
         order.id_order,
         newAttemptNo,
         id_user,
-        'THẤT BẠI',
+        DELIVERY_ATTEMPT_RESULT.FAILED,
         reason_fail,
         normalizedReasonCode,
         evidence_url || null,
@@ -400,8 +533,10 @@ export class ShipperService {
       }
 
       if (!mustReturn) {
-        await shipperRepo.updateOrderStatus(order.id_order, 'GIAO THẤT BẠI', client);
-        await shipperRepo.updateCurrentShipper(order.id_order, null, client);
+        await shipperRepo.updateOrderStatus(order.id_order, ORDER_STATUS.DELIVERY_FAILED, client);
+        if (order.id_service_type !== 3) {
+          await shipperRepo.updateCurrentShipper(order.id_order, null, client);
+        }
       }
       await shipperRepo.insertOrderLog(
         order.id_order,
@@ -412,11 +547,14 @@ export class ShipperService {
         client
       );
 
+      // Trừ 2 điểm KPI (Thất bại)
+      await shipperRepo.updateShipperPriority(id_user, -2, client);
+
       await client.query('COMMIT');
 
       return {
         tracking_code,
-        status: mustReturn ? 'HOÀN HÀNG' : 'GIAO THẤT BẠI',
+        status: mustReturn ? ORDER_STATUS.RETURNED : ORDER_STATUS.DELIVERY_FAILED,
         attempt_no: newAttemptNo,
         reason_code: normalizedReasonCode,
         redelivery_fee_charged: redeliveryFeeCharged,

@@ -4,6 +4,8 @@ import {
   getPickupList,
   getDeliveryList,
   getDashboardSummary,
+  acceptP2pOrder,
+  acceptPickupOrder,
   confirmPickup,
   reportFailedPickup,
   startDelivery,
@@ -23,6 +25,8 @@ router.use(checkRoles(['SHIPPER']));
 router.get('/pickup-list', getPickupList);
 router.get('/delivery-list', getDeliveryList);
 router.get('/summary', getDashboardSummary);
+router.post('/p2p/accept', acceptP2pOrder);
+router.post('/pickup/accept', acceptPickupOrder);
 router.post('/scan/pickup', confirmPickup);
 router.post('/scan/pickup-failed', reportFailedPickup);
 router.post('/scan/start-delivery', startDelivery);

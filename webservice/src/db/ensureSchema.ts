@@ -1,4 +1,10 @@
 import { pool } from '../config/db';
+import {
+  DELIVERY_ATTEMPT_RESULT,
+  ORDER_STATUS,
+  deliveryAttemptResultVariants,
+  orderStatusVariants,
+} from '../utils/orderStatus';
 
 export const ensureSchema = async () => {
   await pool.query(`
@@ -78,6 +84,24 @@ export const ensureSchema = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS shipper_incomes (
+      id_income SERIAL PRIMARY KEY,
+      id_user INT NOT NULL REFERENCES users(id_user),
+      base_salary NUMERIC NOT NULL DEFAULT 0,
+      total_commission NUMERIC NOT NULL DEFAULT 0,
+      penalty NUMERIC NOT NULL DEFAULT 0,
+      period VARCHAR(7) NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      UNIQUE(id_user, period)
+    );
+  `);
+
+  await pool.query(`
+    ALTER TABLE shipper_incomes
+    ADD COLUMN IF NOT EXISTS penalty NUMERIC NOT NULL DEFAULT 0;
+  `);
+
+  await pool.query(`
     ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS payer_type VARCHAR(20) NOT NULL DEFAULT 'SENDER';
   `);
@@ -96,6 +120,44 @@ export const ensureSchema = async () => {
     ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS current_shipper_id INT;
   `);
+
+  await pool.query(`
+    ALTER TABLE order_logs
+    ALTER COLUMN action TYPE TEXT;
+  `);
+
+  await pool.query(
+    `
+    WITH latest_dispatch AS (
+      SELECT DISTINCT ON (ol.id_order)
+        ol.id_order,
+        ol.action
+      FROM order_logs ol
+      ORDER BY ol.id_order, ol.created_at DESC, ol.id_log DESC
+    )
+    UPDATE orders o
+    SET status = $1
+    FROM latest_dispatch latest
+    WHERE latest.id_order = o.id_order
+      AND o.status = ANY($2::text[])
+      AND latest.action = ANY($3::text[]);
+  `,
+    [
+      ORDER_STATUS.PICKED_UP,
+      orderStatusVariants(ORDER_STATUS.DELIVERING),
+      ['XUAT KHO', 'XUẤT KHO', 'XUAT KHO -> GIAO CUOI', 'XUẤT KHO -> GIAO CUOI'],
+    ]
+  );
+
+  await pool.query(
+    `
+    UPDATE orders
+    SET status = $1
+    WHERE status = ANY($2::text[])
+      AND current_shipper_id IS NULL;
+  `,
+    [ORDER_STATUS.PICKED_UP, orderStatusVariants(ORDER_STATUS.DELIVERING)]
+  );
 
   await pool.query(`
     ALTER TABLE wallets
@@ -121,6 +183,24 @@ export const ensureSchema = async () => {
     ALTER TABLE delivery_attempts
     ADD COLUMN IF NOT EXISTS reason_code VARCHAR(50);
   `);
+
+  await pool.query(
+    `
+    UPDATE delivery_attempts
+    SET result = $1
+    WHERE result = ANY($2::text[]);
+  `,
+    [DELIVERY_ATTEMPT_RESULT.SUCCESS, deliveryAttemptResultVariants(DELIVERY_ATTEMPT_RESULT.SUCCESS)]
+  );
+
+  await pool.query(
+    `
+    UPDATE delivery_attempts
+    SET result = $1
+    WHERE result = ANY($2::text[]);
+  `,
+    [DELIVERY_ATTEMPT_RESULT.FAILED, deliveryAttemptResultVariants(DELIVERY_ATTEMPT_RESULT.FAILED)]
+  );
 
   await pool.query(`
     ALTER TABLE pricing_rules
@@ -353,7 +433,7 @@ export const ensureSchema = async () => {
       SELECT da.id_shipper, da.created_at as delivered_at
       FROM delivery_attempts da
       WHERE da.id_order = o.id_order
-        AND da.result = 'THÃ€NH CÃ”NG'
+        AND da.result IN ('THÀNH CÔNG', 'THÃ€NH CÃ”NG', 'THÃƒâ‚¬NH CÃƒâ€NG')
       ORDER BY da.created_at DESC, da.id_attempt DESC
       LIMIT 1
     ) delivered ON TRUE
@@ -417,7 +497,7 @@ export const ensureSchema = async () => {
       SELECT da.id_shipper, da.created_at as delivered_at
       FROM delivery_attempts da
       WHERE da.id_order = o.id_order
-        AND da.result = 'THÃ€NH CÃ”NG'
+        AND da.result IN ('THÀNH CÔNG', 'THÃ€NH CÃ”NG', 'THÃƒâ‚¬NH CÃƒâ€NG')
       ORDER BY da.created_at DESC, da.id_attempt DESC
       LIMIT 1
     ) delivered ON TRUE
@@ -504,5 +584,26 @@ export const ensureSchema = async () => {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_shipper_ward_assignments_spoke_active
     ON shipper_ward_assignments(id_spoke, is_active, priority);
+  `);
+
+  // --- DROP NOT NULL CONSTRAINTS ---
+  await pool.query(`
+    DO $$
+    BEGIN
+      ALTER TABLE spokes ALTER COLUMN id_hub DROP NOT NULL;
+    EXCEPTION
+      WHEN undefined_table THEN
+        NULL;
+    END $$;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      ALTER TABLE areas ALTER COLUMN id_spoke DROP NOT NULL;
+    EXCEPTION
+      WHEN undefined_table THEN
+        NULL;
+    END $$;
   `);
 };

@@ -7,6 +7,9 @@ interface InventoryItem {
   id_inventory: number;
   tracking_code: string;
   warehouse_name: string;
+  current_warehouse_name?: string;
+  dest_spoke_name?: string;
+  dest_hub_name?: string;
   shelf_location: string | null;
   entered_at: string;
   hours_in_warehouse: string;
@@ -146,6 +149,12 @@ const InventoryCard = ({ item, isDanger = false }: { item: InventoryItem; isDang
       </div>
       
       <div className="inv-card-body">
+        <div className="inv-row">
+          <span className="inv-lbl">Dang o kho:</span>
+          <span className="inv-val highlight">
+            {item.current_warehouse_name || item.warehouse_name || 'Chua xac dinh'}
+          </span>
+        </div>
         <div className="inv-row">
           <span className="inv-lbl">Vị trí kệ:</span>
           <span className="inv-val highlight">

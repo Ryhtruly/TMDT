@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { FiHome, FiMap, FiUsers, FiSettings, FiGift, FiMessageSquare, FiActivity, FiDollarSign, FiShoppingBag, FiPackage, FiNavigation, FiRefreshCcw } from 'react-icons/fi';
+import { FiHome, FiMap, FiUsers, FiSettings, FiGift, FiMessageSquare, FiDollarSign, FiShoppingBag, FiPackage, FiNavigation, FiRefreshCcw } from 'react-icons/fi';
 import apiClient from '../../api/client';
 import './Layout.css';
 
@@ -83,7 +83,6 @@ const Sidebar = () => {
       label: 'Hệ thống',
       items: [
         { name: 'CSKH & Sự Cố', path: '/support', icon: <FiMessageSquare />, badge: pendingFeedback },
-        { name: 'Kiểm Toán & Lương', path: '/audit-salary', icon: <FiActivity /> },
         { name: 'Cấu Hình', path: '/settings', icon: <FiSettings /> },
       ]
     }
@@ -92,8 +91,8 @@ const Sidebar = () => {
   return (
     <aside className="admin-sidebar">
       <div className="sidebar-logo">
-        <h2 className="text-primary" style={{ fontWeight: 800, fontSize: '1.3rem' }}>⚡ GHN ADMIN</h2>
-        <p style={{ fontSize: '0.7rem', color: 'var(--slate-500)', marginTop: '2px' }}>Logistics Management System</p>
+        <h2 className="text-primary" style={{ fontWeight: 800, fontSize: '1.3rem' }}>⚡ GHN Quản trị viên</h2>
+        <p style={{ fontSize: '0.7rem', color: 'var(--slate-500)', marginTop: '2px' }}>Hệ thống quản lý vận chuyển</p>
       </div>
 
       <nav className="sidebar-nav">

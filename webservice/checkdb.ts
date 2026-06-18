@@ -1,0 +1,1 @@
+import { pool } from './src/config/db'; pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'").then(res => { res.rows.forEach(r => console.log(r.table_name)); pool.end(); }).catch(e => console.error(e));

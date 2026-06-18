@@ -1,4 +1,5 @@
-import { pool } from '../config/db';
+﻿import { pool } from '../config/db';
+import { DELIVERY_ATTEMPT_RESULT, deliveryAttemptResultVariants } from '../utils/orderStatus';
 
 export class GeneralRepository {
   // === COD PAYOUT ===
@@ -226,17 +227,17 @@ export class GeneralRepository {
   // === INCIDENTS ===
   async createIncident(id_order: number, type: string, description: string) {
     const result = await pool.query(
-      "INSERT INTO incidents (id_order, type, description, compensation, status) VALUES ($1, $2, $3, 0, 'ĐANG ĐIỀU TRA') RETURNING *",
+      "INSERT INTO incidents (id_order, type, description, compensation, status) VALUES ($1, $2, $3, 0, 'ÄANG ÄIá»€U TRA') RETURNING *",
       [id_order, type, description]
     );
     return result.rows[0];
   }
 
   async resolveIncident(id_incident: number, compensation: number) {
-    const MAX_COMPENSATION = 5000000; // Docx: tối đa 5 triệu
+    const MAX_COMPENSATION = 5000000; // Docx: tá»‘i Ä‘a 5 triá»‡u
     const actualComp = Math.min(compensation, MAX_COMPENSATION);
     const result = await pool.query(
-      "UPDATE incidents SET compensation = $1, status = 'ĐÃ ĐỀN BÙ' WHERE id_incident = $2 RETURNING *",
+      "UPDATE incidents SET compensation = $1, status = 'ÄÃƒ Äá»€N BÃ™' WHERE id_incident = $2 RETURNING *",
       [actualComp, id_incident]
     );
     return result.rows[0];
@@ -265,7 +266,7 @@ export class GeneralRepository {
   // === FEEDBACKS ===
   async createFeedback(id_user: number, title: string, content: string) {
     const result = await pool.query(
-      "INSERT INTO feedbacks (id_user, title, content, status) VALUES ($1, $2, $3, 'MỚI') RETURNING *",
+      "INSERT INTO feedbacks (id_user, title, content, status) VALUES ($1, $2, $3, 'Má»šI') RETURNING *",
       [id_user, title, content]
     );
     return result.rows[0];
@@ -281,20 +282,22 @@ export class GeneralRepository {
     await pool.query('UPDATE feedbacks SET status = $1 WHERE id_feedback = $2', [status, id_feedback]);
   }
 
-  // === SHIPPER COD ĐỐI SOÁT ===
+  // === SHIPPER COD Äá»I SOÃT ===
   async getShipperCodSummary(id_shipper: number, date: string) {
     const result = await pool.query(`
       SELECT da.id_order, o.tracking_code, o.cod_amount, da.result
       FROM delivery_attempts da
       JOIN orders o ON da.id_order = o.id_order
-      WHERE da.id_shipper = $1 AND da.result = 'THÀNH CÔNG' AND DATE(o.created_at) = $2
-    `, [id_shipper, date]);
+      WHERE da.id_shipper = $1
+        AND da.result = ANY($3::text[])
+        AND DATE(o.created_at) = $2
+    `, [id_shipper, date, deliveryAttemptResultVariants(DELIVERY_ATTEMPT_RESULT.SUCCESS)]);
     const orders = result.rows;
     const total_cod = orders.reduce((sum: number, o: any) => sum + Number(o.cod_amount || 0), 0);
     return { date, total_orders: orders.length, total_cod_collected: total_cod, orders };
   }
 
-  // === HOÀN HÀNG (Docx: Nội tỉnh 5.000đ, tuyến khác 50% cước giao đi) ===
+  // === HOÃ€N HÃ€NG (Docx: Ná»™i tá»‰nh 5.000Ä‘, tuyáº¿n khÃ¡c 50% cÆ°á»›c giao Ä‘i) ===
   async getOrderForReturn(id_order: number) {
     return (await pool.query('SELECT * FROM orders WHERE id_order = $1', [id_order])).rows[0] || null;
   }
@@ -326,8 +329,11 @@ export class GeneralRepository {
     return result.rows[0]?.route_type || 'INTER_HUB';
   }
 
-  async setOrderReturn(id_order: number, return_fee: number, client: any) {
-    await client.query("UPDATE orders SET status = 'HOÀN HÀNG', is_return = TRUE, return_fee = $1 WHERE id_order = $2", [return_fee, id_order]);
+  async setOrderReturn(id_order: number, return_fee: number, status: string, client: any) {
+    await client.query(
+      'UPDATE orders SET status = $1, is_return = TRUE, return_fee = $2, current_shipper_id = NULL WHERE id_order = $3',
+      [status, return_fee, id_order]
+    );
   }
 
   async insertOrderLogAtLatestLocation(id_order: number, id_actor: number, action: string, client: any) {
@@ -343,7 +349,7 @@ export class GeneralRepository {
     );
   }
 
-  // === SHIPPER INCOME (Bảng 33 Docx: lương cứng + hoa hồng - phạt) ===
+  // === SHIPPER INCOME (Báº£ng 33 Docx: lÆ°Æ¡ng cá»©ng + hoa há»“ng - pháº¡t) ===
   async getOrCreateShipperIncome(id_user: number, period: string) {
     let result = await pool.query('SELECT * FROM shipper_incomes WHERE id_user = $1 AND period = $2', [id_user, period]);
     if (!result.rows[0]) {
@@ -363,15 +369,15 @@ export class GeneralRepository {
   }
 
   async calcShipperCommission(id_user: number, period: string) {
-    // Đếm số đơn giao thành công trong tháng → hoa hồng 3.000đ-5.000đ/đơn (Docx dòng 1549)
+    // Äáº¿m sá»‘ Ä‘Æ¡n giao thÃ nh cÃ´ng trong thÃ¡ng â†’ hoa há»“ng 3.000Ä‘-5.000Ä‘/Ä‘Æ¡n (Docx dÃ²ng 1549)
     const result = await pool.query(`
       SELECT COUNT(*) as total_delivered
       FROM delivery_attempts da
-      WHERE da.id_shipper = $1 AND da.result = 'THÀNH CÔNG'
+      WHERE da.id_shipper = $1 AND da.result = ANY($3::text[])
         AND TO_CHAR(da.created_at, 'YYYY-MM') = $2
-    `, [id_user, period]);
+    `, [id_user, period, deliveryAttemptResultVariants(DELIVERY_ATTEMPT_RESULT.SUCCESS)]);
     const total = parseInt(result.rows[0].total_delivered || '0');
-    const rate = total > 100 ? 5000 : total > 50 ? 4000 : 3000; // Tính theo bậc
+    const rate = total > 100 ? 5000 : total > 50 ? 4000 : 3000; // TÃ­nh theo báº­c
     return { total_delivered: total, rate_per_order: rate, total_commission: total * rate };
   }
 
@@ -379,7 +385,7 @@ export class GeneralRepository {
     return (await pool.query('SELECT * FROM shipper_incomes WHERE id_user = $1 ORDER BY period DESC', [id_user])).rows;
   }
 
-  // === AUDIT LOG (Bảng 34 Docx) ===
+  // === AUDIT LOG (Báº£ng 34 Docx) ===
   async writeAuditLog(id_actor: number, action: string, object_type: string, payload_json: any) {
     await pool.query(
       'INSERT INTO audit_log (id_actor, action, object_type, payload_json) VALUES ($1, $2, $3, $4)',
@@ -395,7 +401,7 @@ export class GeneralRepository {
     `, [limit])).rows;
   }
 
-  // === BÁO CÁO VẬN HÀNH SHOP (Docx dòng 1426-1433) ===
+  // === BÃO CÃO Váº¬N HÃ€NH SHOP (Docx dÃ²ng 1426-1433) ===
   async getShopOperationsReport(id_user: number) {
     const shopResult = await pool.query('SELECT id_shop FROM shops WHERE id_user = $1', [id_user]);
     if (!shopResult.rows[0]) return null;
@@ -403,14 +409,14 @@ export class GeneralRepository {
 
     const result = await pool.query(`
       SELECT
-        COUNT(*) FILTER (WHERE o.status = 'GIAO THÀNH CÔNG') as don_giao_thanh_cong,
-        COUNT(*) FILTER (WHERE o.status = 'GIAO THẤT BẠI') as don_giao_that_bai,
-        COUNT(*) FILTER (WHERE o.status = 'HOÀN HÀNG') as don_hoan_hang,
-        COUNT(*) FILTER (WHERE o.status = 'ĐANG GIAO') as don_dang_giao,
-        COUNT(*) FILTER (WHERE o.status = 'ĐÃ LẤY HÀNG') as don_da_lay_hang,
-        COUNT(*) FILTER (WHERE o.status = 'CHỜ LẤY HÀNG') as don_cho_lay_hang,
-        COUNT(*) FILTER (WHERE o.status = 'TẠI KHO') as don_tai_kho,
-        COUNT(*) FILTER (WHERE o.status = 'ĐÃ HỦY') as don_da_huy,
+        COUNT(*) FILTER (WHERE o.status = 'GIAO THÃ€NH CÃ”NG') as don_giao_thanh_cong,
+        COUNT(*) FILTER (WHERE o.status = 'GIAO THáº¤T Báº I') as don_giao_that_bai,
+        COUNT(*) FILTER (WHERE o.status = 'HOÃ€N HÃ€NG') as don_hoan_hang,
+        COUNT(*) FILTER (WHERE o.status = 'ÄANG GIAO') as don_dang_giao,
+        COUNT(*) FILTER (WHERE o.status = 'ÄÃƒ Láº¤Y HÃ€NG') as don_da_lay_hang,
+        COUNT(*) FILTER (WHERE o.status = 'CHá»œ Láº¤Y HÃ€NG') as don_cho_lay_hang,
+        COUNT(*) FILTER (WHERE o.status = 'Táº I KHO') as don_tai_kho,
+        COUNT(*) FILTER (WHERE o.status = 'ÄÃƒ Há»¦Y') as don_da_huy,
         COUNT(*) as tong_don
       FROM orders o JOIN stores s ON o.id_store = s.id_store
       WHERE s.id_shop = $1
@@ -418,7 +424,7 @@ export class GeneralRepository {
     return result.rows[0];
   }
 
-  // === TÌM KIẾM ĐƠN NÂNG CAO (Docx dòng 1399, 1526) ===
+  // === TÃŒM KIáº¾M ÄÆ N NÃ‚NG CAO (Docx dÃ²ng 1399, 1526) ===
   async searchOrders(id_user: number, filters: any) {
     const shopResult = await pool.query('SELECT id_shop FROM shops WHERE id_user = $1', [id_user]);
     if (!shopResult.rows[0]) return [];
@@ -445,7 +451,7 @@ export class GeneralRepository {
     return (await pool.query(query, params)).rows;
   }
 
-  // === AN TOÀN: Kiểm tra có đơn hàng trong kho trước khi xóa Hub/Spoke (Docx dòng 29) ===
+  // === AN TOÃ€N: Kiá»ƒm tra cÃ³ Ä‘Æ¡n hÃ ng trong kho trÆ°á»›c khi xÃ³a Hub/Spoke (Docx dÃ²ng 29) ===
   async hasActiveOrdersInHub(id_hub: number) {
     const result = await pool.query(
       'SELECT COUNT(*) as cnt FROM warehouse_inventory WHERE id_hub = $1',
@@ -463,7 +469,7 @@ export class GeneralRepository {
   }
 
 
-  // === REJECT COD PAYOUT (Admin từ chối — shop cần gửi lại yêu cầu mới) ===
+  // === REJECT COD PAYOUT (Admin tá»« chá»‘i â€” shop cáº§n gá»­i láº¡i yÃªu cáº§u má»›i) ===
   async rejectCodPayout(id_payout: number, id_admin: number, admin_note: string | null, client: any) {
     const result = await client.query(`
       UPDATE cod_payouts
@@ -477,14 +483,14 @@ export class GeneralRepository {
     return result.rows[0] || null;
   }
 
-  // === REJECT SHIPPER COD RECONCILIATION (Admin từ chối — orders & cash_collections free lại) ===
+  // === REJECT SHIPPER COD RECONCILIATION (Admin tá»« chá»‘i â€” orders & cash_collections free láº¡i) ===
   async rejectShipperCodReconciliation(
     id_reconciliation: number,
     id_admin: number,
     admin_note: string | null,
     client: any
   ) {
-    // 1. Đặt phiếu về trạng thái TU_CHOI
+    // 1. Äáº·t phiáº¿u vá» tráº¡ng thÃ¡i TU_CHOI
     const result = await client.query(`
       UPDATE shipper_cod_reconciliations
       SET status = 'TU_CHOI',
@@ -495,7 +501,7 @@ export class GeneralRepository {
       RETURNING *
     `, [id_reconciliation, id_admin, admin_note]);
 
-    // 2. Giải phóng các cash_collections để shipper có thể tạo phiếu mới nếu cần
+    // 2. Giáº£i phÃ³ng cÃ¡c cash_collections Ä‘á»ƒ shipper cÃ³ thá»ƒ táº¡o phiáº¿u má»›i náº¿u cáº§n
     await client.query(`
       UPDATE order_cash_collections
       SET reconciliation_id = NULL

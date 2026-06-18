@@ -5,6 +5,7 @@ import {
   isSameArea,
   isSameWardArea,
 } from '../utils/location';
+import { DELIVERY_ATTEMPT_RESULT, ORDER_STATUS, deliveryAttemptResultVariants, orderStatusVariants } from '../utils/orderStatus';
 import { deductWalletAndLog as deductWalletById, getSyncedWalletByUserId } from '../utils/walletDebt';
 
 export class ShipperRepository {
@@ -32,14 +33,19 @@ export class ShipperRepository {
       `
       SELECT o.id_order, o.tracking_code, o.receiver_name, o.receiver_phone,
              o.receiver_address, o.cod_amount, o.weight, o.status, o.created_at,
+             o.id_service_type, o.current_shipper_id,
              s.store_name, s.address as pickup_address, s.phone as pickup_phone,
-             a.province, a.district,
+             a.province, a.district, a.id_spoke as dest_spoke,
+             sp.spoke_name as dest_spoke_name,
+             h.hub_name as dest_hub_name,
              COALESCE(o.payer_type, 'SENDER') as payer_type,
              COALESCE(o.fee_payment_method, 'WALLET') as fee_payment_method,
              COALESCE(pickup_cash.sender_cash_fee, 0) as sender_cash_fee_on_pickup
       FROM orders o
       JOIN stores s ON o.id_store = s.id_store
       JOIN areas a ON o.id_dest_area = a.id_area
+      LEFT JOIN spokes sp ON sp.id_spoke = a.id_spoke
+      LEFT JOIN hubs h ON h.id_hub = sp.id_hub
       LEFT JOIN LATERAL (
         SELECT SUM(expected_amount) as sender_cash_fee
         FROM order_cash_collections occ
@@ -47,9 +53,10 @@ export class ShipperRepository {
           AND occ.collection_stage = 'PICKUP'
           AND occ.payer_party = 'SENDER'
       ) pickup_cash ON TRUE
-      WHERE o.status = 'CHỜ LẤY HÀNG'
+      WHERE o.status = ANY($1::text[])
       ORDER BY o.created_at ASC
-    `
+    `,
+      [orderStatusVariants(ORDER_STATUS.WAITING_PICKUP)]
     );
     return result.rows;
   }
@@ -64,15 +71,15 @@ export class ShipperRepository {
       LEFT JOIN (
         SELECT current_shipper_id, COUNT(*) as active_orders
         FROM orders
-        WHERE status = 'ĐANG GIAO'
+        WHERE status = ANY($2::text[])
           AND current_shipper_id IS NOT NULL
         GROUP BY current_shipper_id
       ) loads ON loads.current_shipper_id = swa.id_shipper
       WHERE swa.id_spoke = $1
         AND swa.is_active = TRUE
-      ORDER BY swa.priority ASC, COALESCE(loads.active_orders, 0) ASC, swa.id_shipper ASC
+      ORDER BY swa.priority DESC, COALESCE(loads.active_orders, 0) ASC, swa.id_shipper ASC
     `,
-      [id_spoke]
+      [id_spoke, orderStatusVariants(ORDER_STATUS.DELIVERING)]
     );
     return result.rows;
   }
@@ -128,9 +135,11 @@ export class ShipperRepository {
       `
       SELECT o.id_order, o.tracking_code, o.receiver_name, o.receiver_phone,
              o.receiver_address, o.cod_amount, o.weight, o.status, o.created_at,
-             o.current_shipper_id,
+             o.current_shipper_id, o.id_service_type,
              latest_log.action as latest_action,
              a.province, a.district, a.id_spoke as dest_spoke,
+             sp.spoke_name as dest_spoke_name,
+             h.hub_name as dest_hub_name,
              COALESCE(o.payer_type, 'SENDER') as payer_type,
              COALESCE(o.fee_payment_method, 'WALLET') as fee_payment_method,
              COALESCE(o.shipping_fee, 0) as shipping_fee,
@@ -138,6 +147,8 @@ export class ShipperRepository {
              (SELECT COUNT(*) FROM delivery_attempts da WHERE da.id_order = o.id_order) as attempt_count
       FROM orders o
       JOIN areas a ON o.id_dest_area = a.id_area
+      LEFT JOIN spokes sp ON sp.id_spoke = a.id_spoke
+      LEFT JOIN hubs h ON h.id_hub = sp.id_hub
       LEFT JOIN LATERAL (
         SELECT ol.action
         FROM order_logs ol
@@ -145,19 +156,27 @@ export class ShipperRepository {
         ORDER BY ol.created_at DESC, ol.id_log DESC
         LIMIT 1
       ) latest_log ON TRUE
-      WHERE a.id_spoke = $1
+      WHERE (a.id_spoke = $1 OR (o.id_service_type = 3 AND o.current_shipper_id = $2))
         AND (
           (
-            o.status = 'ĐÃ LẤY HÀNG'
-            AND latest_log.action = 'XUAT KHO -> GIAO CUOI'
-            AND (o.current_shipper_id IS NULL OR o.current_shipper_id = $2)
+            o.status = ANY($3::text[])
+            AND (
+              (o.id_service_type = 3 AND o.current_shipper_id = $2)
+              OR (latest_log.action = 'XUAT KHO -> GIAO CUOI' AND (o.current_shipper_id IS NULL OR o.current_shipper_id = $2))
+            )
           )
-          OR (o.status = 'ĐANG GIAO' AND o.current_shipper_id = $2)
-          OR (o.status = 'GIAO THẤT BẠI' AND (o.current_shipper_id IS NULL OR o.current_shipper_id = $2))
+          OR (o.status = ANY($4::text[]) AND o.current_shipper_id = $2)
+          OR (o.status = ANY($5::text[]) AND (o.current_shipper_id IS NULL OR o.current_shipper_id = $2))
         )
       ORDER BY o.created_at ASC
     `,
-      [id_spoke, id_user]
+      [
+        id_spoke,
+        id_user,
+        orderStatusVariants(ORDER_STATUS.PICKED_UP),
+        orderStatusVariants(ORDER_STATUS.DELIVERING),
+        orderStatusVariants(ORDER_STATUS.DELIVERY_FAILED),
+      ]
     );
     return result.rows;
   }
@@ -319,8 +338,8 @@ export class ShipperRepository {
 
   async markOrderReturn(id_order: number, return_fee: number, client: any) {
     await client.query(
-      "UPDATE orders SET status = 'HOÀN HÀNG', is_return = TRUE, return_fee = $1, current_shipper_id = NULL WHERE id_order = $2",
-      [return_fee, id_order]
+      'UPDATE orders SET status = $1, is_return = TRUE, return_fee = $2, current_shipper_id = NULL WHERE id_order = $3',
+      [ORDER_STATUS.RETURNED, return_fee, id_order]
     );
   }
 
@@ -338,13 +357,17 @@ export class ShipperRepository {
     const result = await pool.query(
       `
       SELECT
-        COUNT(*) FILTER (WHERE result = 'THÀNH CÔNG') as delivered_today,
-        COUNT(*) FILTER (WHERE result = 'THẤT BẠI') as failed_today
+        COUNT(*) FILTER (WHERE result = ANY($2::text[])) as delivered_today,
+        COUNT(*) FILTER (WHERE result = ANY($3::text[])) as failed_today
       FROM delivery_attempts
       WHERE id_shipper = $1
         AND DATE(created_at) = CURRENT_DATE
     `,
-      [id_user]
+      [
+        id_user,
+        deliveryAttemptResultVariants(DELIVERY_ATTEMPT_RESULT.SUCCESS),
+        deliveryAttemptResultVariants(DELIVERY_ATTEMPT_RESULT.FAILED),
+      ]
     );
     return result.rows[0] || { delivered_today: 0, failed_today: 0 };
   }
@@ -379,11 +402,11 @@ export class ShipperRepository {
         FROM delivery_attempts da
         WHERE da.id_order = o.id_order
           AND da.id_shipper = $1
-          AND da.result = 'THÀNH CÔNG'
+          AND da.result = ANY($2::text[])
         ORDER BY da.attempt_no DESC, da.created_at DESC
         LIMIT 1
       ) da ON TRUE
-      WHERE o.status = 'GIAO THÀNH CÔNG'
+      WHERE o.status = ANY($3::text[])
         AND o.shipper_reconciliation_id IS NULL
         AND (
           COALESCE(o.cod_amount, 0) > 0
@@ -391,7 +414,7 @@ export class ShipperRepository {
         )
       ORDER BY da.delivered_at DESC, o.id_order DESC
     `,
-      [id_user]
+      [id_user, deliveryAttemptResultVariants(DELIVERY_ATTEMPT_RESULT.SUCCESS), orderStatusVariants(ORDER_STATUS.DELIVERED)]
     );
     return result.rows;
   }
@@ -500,10 +523,10 @@ export class ShipperRepository {
       SELECT COUNT(*) as delivered_count
       FROM delivery_attempts da
       WHERE da.id_shipper = $1
-        AND da.result = 'THÀNH CÔNG'
+        AND da.result = ANY($4::text[])
         AND DATE(da.created_at) BETWEEN $2 AND $3
     `,
-      [id_user, startDate, endDate]
+      [id_user, startDate, endDate, deliveryAttemptResultVariants(DELIVERY_ATTEMPT_RESULT.SUCCESS)]
     );
 
     const deliveredCount = parseInt(deliveredResult.rows[0]?.delivered_count || '0', 10);
@@ -560,10 +583,10 @@ export class ShipperRepository {
         SELECT COUNT(*) as cnt
         FROM delivery_attempts da
         WHERE da.id_shipper = $1
-          AND da.result = 'THÀNH CÔNG'
+          AND da.result = ANY($4::text[])
           AND DATE(da.created_at) BETWEEN $2 AND $3
       `,
-        [id_user, startDate, endDate]
+        [id_user, startDate, endDate, deliveryAttemptResultVariants(DELIVERY_ATTEMPT_RESULT.SUCCESS)]
       );
 
       const count = parseInt(deliveredRes.rows[0]?.cnt || '0', 10);
@@ -582,6 +605,13 @@ export class ShipperRepository {
     }
 
     return results;
+  }
+
+  async updateShipperPriority(id_shipper: number, points: number, client: any) {
+    await client.query(
+      `UPDATE shipper_ward_assignments SET priority = priority + $1 WHERE id_shipper = $2`,
+      [points, id_shipper]
+    );
   }
 
   async getTxClient() {

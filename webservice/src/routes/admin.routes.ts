@@ -8,7 +8,9 @@ import {
   getEmployees, updateEmployee, deactivateEmployee, getAllShops, getAllOrders, getAllBags,
   getPricingRules, getServiceTypes, updateServiceType, getShipperWardAssignments,
   createShipperWardAssignment, deleteShipperWardAssignment, autoGenerateRoute,
-  getOrderDetailByTracking, toggleRoute
+  getOrderDetailByTracking, toggleRoute,
+  assignSpokeToHub, unassignSpokeFromHub, assignAreaToSpoke, unassignAreaFromSpoke,
+  completeReturn
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -39,11 +41,15 @@ router.get('/infrastructure', getInfrastructureList);
 router.post('/hubs', createHub);
 router.put('/hubs/:id', updateHub);
 router.delete('/hubs/:id', deleteHub);
+router.put('/hubs/:id/spokes/:id_spoke', assignSpokeToHub);
+router.delete('/hubs/:id/spokes/:id_spoke', unassignSpokeFromHub);
 
 // Spokes
 router.post('/spokes', createSpoke);
 router.put('/spokes/:id', updateSpoke);
 router.delete('/spokes/:id', deleteSpoke);
+router.put('/spokes/:id/areas/:id_area', assignAreaToSpoke);
+router.delete('/spokes/:id/areas/:id_area', unassignAreaFromSpoke);
 
 // Phân vùng bản đồ
 router.post('/areas', setAreaCoverage);
@@ -69,6 +75,7 @@ router.get('/shops', getAllShops);
 
 // Đơn hàng toàn hệ thống
 router.get('/orders', getAllOrders);
+router.post('/returns/:id/complete', completeReturn);
 
 // Bao kiện
 router.get('/bags', getAllBags);

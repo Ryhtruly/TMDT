@@ -169,7 +169,21 @@ const WarehouseScanner = () => {
                     {scan.status === 'success' ? <FiCheckCircle /> : <FiXCircle />}
                   </div>
                   <div className="si-info">
-                    <div className="si-code"><FiPackage size={14} /> {scan.code}</div>
+                    <div className="si-code" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <FiPackage size={14} /> {scan.code}
+                      {scan.status === 'success' && !scan.code.startsWith('B-') && (
+                        <button
+                          onClick={() => window.open(`http://localhost:5173/track?code=${scan.code}`, '_blank')}
+                          style={{
+                            padding: '2px 8px', fontSize: '0.7rem',
+                            background: '#e0f2fe', color: '#0369a1', border: 'none',
+                            borderRadius: '4px', cursor: 'pointer', fontWeight: 600
+                          }}
+                        >
+                          Xem hành trình
+                        </button>
+                      )}
+                    </div>
                     <div className="si-msg">{scan.msg}</div>
                   </div>
                   <div className="si-time">{scan.time}</div>

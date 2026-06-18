@@ -234,7 +234,7 @@ const CreateOrder = () => {
         })) as any;
         setPreviewFee(res?.status === 'success' ? res.data : null);
         setPreviewError(res?.status === 'success' ? '' : 'Khong tinh duoc phi van chuyen.');
-        if (res?.status === 'success' && res.data?.operational_route_type !== 'NOI_TINH' && formData.id_service_type === 3) {
+        if (res?.status === 'success' && res.data?.pricing_route_type !== 'Nội tỉnh' && formData.id_service_type === 3) {
           setFormData((p) => ({ ...p, id_service_type: 1 }));
         }
       } catch (err: any) {
@@ -440,7 +440,7 @@ const CreateOrder = () => {
             <div className="ghn-card-title">Dịch Vụ Vận Chuyển</div>
             <div className="service-cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
               {serviceTypes.map(svc => {
-                const disableSameDay = svc.id_service === 3 && previewFee && previewFee.operational_route_type !== 'NOI_TINH';
+                const disableSameDay = svc.id_service === 3 && previewFee && previewFee.pricing_route_type !== 'Nội tỉnh';
                 return (
                   <label key={svc.id_service} className={`service-card ${formData.id_service_type === svc.id_service ? 'active' : ''} ${disableSameDay ? 'disabled' : ''}`} style={disableSameDay ? { opacity: 0.5, pointerEvents: 'none' } : {}}>
                     <div className="service-card-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>

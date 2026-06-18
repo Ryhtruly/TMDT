@@ -257,7 +257,7 @@ export class ShopService {
     const history = await shopRepo.getTransactionHistory(wallet.id_wallet);
     const available_balance = Number(wallet.available_balance || 0);
     const usedCredit = Number(wallet.used_credit || 0);
-    const debtNotice = usedCredit > 0
+    const debtNotice = usedCredit > 0 && (wallet.is_debt_locked || wallet.is_debt_overdue || wallet.is_debt_over_limit)
       ? {
           should_show: true,
           used_credit: usedCredit,
@@ -267,7 +267,7 @@ export class ShopService {
           is_locked: !!wallet.is_debt_locked,
           message: wallet.is_debt_locked
             ? `Tai khoan dang bi khoa tao don do no qua han/qua han muc. Vui long nap ${usedCredit.toLocaleString('vi-VN')}d de mo lai dich vu.`
-            : `Tai khoan dang no ${usedCredit.toLocaleString('vi-VN')}d. Vui long thanh toan truoc han de tranh bi khoa dich vu.`,
+            : `Tai khoan dang no ${usedCredit.toLocaleString('vi-VN')}d qua han hoac vuot han muc. Vui long thanh toan de tranh bi khoa dich vu.`,
         }
       : { should_show: false };
 

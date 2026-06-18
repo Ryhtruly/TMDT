@@ -1,5 +1,6 @@
-import { GeneralRepository } from '../repositories/general.repository';
+﻿import { GeneralRepository } from '../repositories/general.repository';
 import { OrderRepository } from '../repositories/order.repository';
+import { ORDER_STATUS, orderStatusIn } from '../utils/orderStatus';
 import { assertWalletNotDebtLocked, calcWalletAvailable } from '../utils/walletDebt';
 
 const repo = new GeneralRepository();
@@ -284,10 +285,10 @@ export class GeneralService {
 
   private assertReturnable(order: any) {
     if (!order) throw new Error('Don hang khong ton tai hoac khong thuoc shop nay.');
-    if (order.is_return || ['HOÀN HÀNG', 'ĐANG HOÀN'].includes(order.status)) {
+    if (order.is_return || orderStatusIn(order.status, [ORDER_STATUS.RETURNED, ORDER_STATUS.RETURNING])) {
       throw new Error('Don nay da nam trong luong hoan hang.');
     }
-    if (!['GIAO THẤT BẠI', 'TẠI KHO'].includes(order.status)) {
+    if (!orderStatusIn(order.status, [ORDER_STATUS.DELIVERY_FAILED, ORDER_STATUS.AT_WAREHOUSE])) {
       throw new Error(`Khong the hoan hang. Don dang o trang thai "${order.status}".`);
     }
   }
@@ -355,7 +356,10 @@ export class GeneralService {
       if (returnFee > 0) {
         await orderRepo.deductWalletAndLog(wallet.id_wallet, returnFee, `PHI HOAN HANG ${order.tracking_code}`, client);
       }
-      await repo.setOrderReturn(id_order, returnFee, client);
+      const nextStatus = orderStatusIn(order.status, [ORDER_STATUS.AT_WAREHOUSE])
+        ? ORDER_STATUS.AT_WAREHOUSE
+        : ORDER_STATUS.RETURNING;
+      await repo.setOrderReturn(id_order, returnFee, nextStatus, client);
       await repo.insertOrderLogAtLatestLocation(id_order, id_user, 'YEU CAU HOAN HANG', client);
       await client.query('COMMIT');
       return {
