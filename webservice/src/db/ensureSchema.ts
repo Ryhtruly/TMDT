@@ -505,4 +505,71 @@ export const ensureSchema = async () => {
     CREATE INDEX IF NOT EXISTS idx_shipper_ward_assignments_spoke_active
     ON shipper_ward_assignments(id_spoke, is_active, priority);
   `);
+
+  // Chuẩn hóa lại các giá trị từng bị lỗi mã hóa ở môi trường Windows/PowerShell cũ.
+  await pool.query(`
+    UPDATE orders
+    SET status = 'CHỜ LẤY HÀNG'
+    WHERE status IN ('CHá»œ Láº¤Y HÃ€NG', 'CHÃ¡Â»Å“ LÃ¡ÂºÂ¤Y HÃƒâ‚¬NG', '?H? L?Y H?NG');
+  `);
+
+  await pool.query(`
+    UPDATE orders
+    SET status = 'ĐÃ LẤY HÀNG'
+    WHERE status IN ('ÄÃƒ Láº¤Y HÃ€NG', 'Ã„ÂÃƒÆ’ LÃ¡ÂºÂ¤Y HÃƒâ‚¬NG', '?A L?Y H?NG');
+  `);
+
+  await pool.query(`
+    UPDATE orders
+    SET status = 'ĐANG GIAO'
+    WHERE status IN ('ÄANG GIAO', 'Ã„ÂANG GIAO', '?ANG GIAO');
+  `);
+
+  await pool.query(`
+    UPDATE orders
+    SET status = 'ĐANG TRUNG CHUYỂN'
+    WHERE status IN ('ÄANG TRUNG CHUYá»‚N', 'Ã„ÂANG TRUNG CHUYÃ¡Â»â€šN', '?ANG TRUNG CHUY?N');
+  `);
+
+  await pool.query(`
+    UPDATE orders
+    SET status = 'GIAO THÀNH CÔNG'
+    WHERE status IN ('GIAO THÃ€NH CÃ”NG', 'GIAO THÃƒâ‚¬NH CÃƒâ€NG');
+  `);
+
+  await pool.query(`
+    UPDATE orders
+    SET status = 'GIAO THẤT BẠI'
+    WHERE status IN ('GIAO THáº¤T Báº I', 'GIAO THÃ¡ÂºÂ¤T BÃ¡ÂºÂ I');
+  `);
+
+  await pool.query(`
+    UPDATE orders
+    SET status = 'TẠI KHO'
+    WHERE status IN ('Táº I KHO', 'TÃ¡ÂºÂ I KHO', 'T?I KHO');
+  `);
+
+  await pool.query(`
+    UPDATE orders
+    SET status = 'ĐANG HOÀN'
+    WHERE status IN ('ÄANG HOÃ€N', 'Ã„ÂANG HOÃƒâ‚¬N', '?ANG HO?N');
+  `);
+
+  await pool.query(`
+    UPDATE cod_payouts
+    SET status = 'CHO_DUYET'
+    WHERE status IN ('CHỜ DUYỆT', 'CHá»œ DUYá»†T', 'CHÃ¡Â»Å“ DUYÃ¡Â»â€ T');
+  `);
+
+  await pool.query(`
+    UPDATE cod_payouts
+    SET status = 'DA_CHUYEN'
+    WHERE status IN ('ĐÃ CHUYỂN', 'ÄÃƒ CHUYá»‚N', 'Ã„ÂÃƒÆ’ CHUYÃ¡Â»â€šN');
+  `);
+
+  await pool.query(`
+    UPDATE delivery_attempts
+    SET result = 'THÀNH CÔNG'
+    WHERE result IN ('THÃ€NH CÃ”NG', 'THÃƒâ‚¬NH CÃƒâ€NG');
+  `);
 };

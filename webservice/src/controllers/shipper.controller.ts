@@ -22,9 +22,46 @@ export const getDeliveryList = async (req: AuthRequest, res: Response): Promise<
   }
 };
 
+export const getToWarehouseList = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const data = await shipperService.getToWarehouseList(req.user.id_user);
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
 export const getDashboardSummary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const data = await shipperService.getDashboardSummary(req.user.id_user);
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+export const acceptPickupOrder = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tracking_code } = req.body;
+    if (!tracking_code) {
+      res.status(400).json({ status: 'error', message: 'Can cung cap tracking_code.' });
+      return;
+    }
+    const data = await shipperService.acceptPickupOrder(req.user.id_user, String(tracking_code).toUpperCase());
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
+export const acceptP2pOrder = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tracking_code } = req.body;
+    if (!tracking_code) {
+      res.status(400).json({ status: 'error', message: 'Can cung cap tracking_code.' });
+      return;
+    }
+    const data = await shipperService.acceptP2pOrder(req.user.id_user, String(tracking_code).toUpperCase());
     res.json({ status: 'success', data });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });

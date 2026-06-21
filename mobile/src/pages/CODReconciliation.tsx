@@ -1,16 +1,32 @@
-import { useState, useEffect } from 'react';
-import { FiDollarSign, FiCheckCircle, FiPackage, FiAlertCircle, FiRefreshCw, FiInfo } from 'react-icons/fi';
+import { useEffect, useState } from 'react';
+import { FiAlertCircle, FiCheckCircle, FiDollarSign, FiInfo, FiPackage, FiRefreshCw } from 'react-icons/fi';
 import api from '../api/client';
 import './COD.css';
 
 interface PendingCashOrder {
+  id_order?: number;
   tracking_code: string;
   receiver_name: string;
   receiver_phone: string;
+  receiver_address?: string;
   cod_amount: number | string;
   receiver_fee_amount: number | string;
   cash_to_remit: number | string;
-  payer_type: string;
+  payer_type?: string;
+}
+
+interface ReconciliationReceipt {
+  id_reconciliation: number;
+  status: string;
+  total_cod: number | string;
+  total_receiver_fee: number | string;
+  total_cash: number | string;
+  order_count: number | string;
+  linked_order_count?: number | string;
+  created_at: string;
+  confirmed_at?: string | null;
+  admin_note?: string | null;
+  orders: PendingCashOrder[];
 }
 
 interface CodSummary {
@@ -19,6 +35,7 @@ interface CodSummary {
   total_receiver_fee: number;
   total_cash_held: number;
   orders: PendingCashOrder[];
+  recent_reconciliations: ReconciliationReceipt[];
 }
 
 const emptySummary: CodSummary = {
@@ -27,14 +44,14 @@ const emptySummary: CodSummary = {
   total_receiver_fee: 0,
   total_cash_held: 0,
   orders: [],
+  recent_reconciliations: [],
 };
 
 const CODReconciliation = () => {
   const [summary, setSummary] = useState<CodSummary>(emptySummary);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [submittedAmount, setSubmittedAmount] = useState(0);
+  const [expandedReceiptId, setExpandedReceiptId] = useState<number | null>(null);
   const [toast, setToast] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
 
@@ -71,47 +88,18 @@ const CODReconciliation = () => {
     try {
       const res: any = await api.post('/shipper/cod-reconciliation', {});
       const amount = Number(res?.data?.total_cash || 0);
-      setSubmittedAmount(amount);
-      setSubmitted(true);
+      const reconciliationId = Number(res?.data?.reconciliation_id || 0);
       showToast(`Da tao phieu nop ${amount.toLocaleString('vi-VN')}d, cho admin xac nhan!`, 'success');
-      setSummary(emptySummary);
+      await fetchCodSummary();
+      if (reconciliationId) {
+        setExpandedReceiptId(reconciliationId);
+      }
     } catch (err: any) {
       showToast(err?.response?.data?.message || 'Khong the gui doi soat. Thu lai sau!', 'error');
     } finally {
       setSubmitting(false);
     }
   };
-
-  if (submitted) {
-    return (
-      <div className="cod-page">
-        <div className="cod-success-screen">
-          <div className="cod-success-icon"><FiCheckCircle size={50} /></div>
-          <h3>Da Gui Phieu Doi Soat!</h3>
-          <p>
-            Ban da xac nhan nop <br />
-            <strong>{submittedAmount.toLocaleString('vi-VN')}d</strong>
-            <br />
-            ve buu cuc trong ca lam nay, cho admin xac nhan da nhan tien.
-          </p>
-          <div className="cod-success-note">
-            <FiInfo size={13} />
-            Danh sach don da nop da duoc tru khoi muc "tien dang giu"; COD chi du dieu kien tra shop sau khi admin xac nhan.
-          </div>
-          <button
-            className="btn-outline"
-            style={{ marginTop: 16 }}
-            onClick={() => {
-              setSubmitted(false);
-              fetchCodSummary();
-            }}
-          >
-            Quay lai
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="cod-page">
@@ -138,6 +126,85 @@ const CODReconciliation = () => {
         </div>
       </div>
 
+      {summary.recent_reconciliations.length > 0 && (
+        <>
+          <div className="cod-section-title">Phieu doi soat da gui</div>
+          <div className="cod-receipt-list">
+            {summary.recent_reconciliations.map((receipt) => {
+              const isExpanded = expandedReceiptId === Number(receipt.id_reconciliation);
+              const statusLabel =
+                receipt.status === 'DA_XAC_NHAN'
+                  ? 'Da xac nhan'
+                  : receipt.status === 'CHO_XAC_NHAN'
+                    ? 'Cho xac nhan'
+                    : receipt.status;
+
+              return (
+                <div className="cod-receipt-card" key={receipt.id_reconciliation}>
+                  <button
+                    className="cod-receipt-head"
+                    onClick={() => setExpandedReceiptId(isExpanded ? null : Number(receipt.id_reconciliation))}
+                  >
+                    <div>
+                      <div className="cod-receipt-code">SCR-{receipt.id_reconciliation}</div>
+                      <div className="cod-receipt-time">{new Date(receipt.created_at).toLocaleString('vi-VN')}</div>
+                    </div>
+                    <div className="cod-receipt-right">
+                      <span className={`cod-receipt-status ${receipt.status === 'DA_XAC_NHAN' ? 'confirmed' : 'pending'}`}>
+                        {statusLabel}
+                      </span>
+                      <strong>{Number(receipt.total_cash || 0).toLocaleString('vi-VN')}d</strong>
+                    </div>
+                  </button>
+
+                  <div className="cod-receipt-meta">
+                    <span>{Number(receipt.linked_order_count || receipt.order_count || 0)} don</span>
+                    <span>COD: {Number(receipt.total_cod || 0).toLocaleString('vi-VN')}d</span>
+                    <span>Phi tien mat: {Number(receipt.total_receiver_fee || 0).toLocaleString('vi-VN')}d</span>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="cod-receipt-body">
+                      {receipt.orders.map((order) => (
+                        <div className="cod-receipt-order" key={`${receipt.id_reconciliation}-${order.tracking_code}`}>
+                          <div>
+                            <div className="cod-order-code">{order.tracking_code}</div>
+                            <div className="cod-order-name">{order.receiver_name}</div>
+                            {Number(order.cod_amount || 0) > 0 && (
+                              <div className="cod-order-name">COD: {Number(order.cod_amount).toLocaleString('vi-VN')}d</div>
+                            )}
+                            {Number(order.receiver_fee_amount || 0) > 0 && (
+                              <div className="cod-order-name">
+                                Phi ship/bao hiem: {Number(order.receiver_fee_amount).toLocaleString('vi-VN')}d
+                              </div>
+                            )}
+                          </div>
+                          <div className="cod-order-amount">{Number(order.cash_to_remit || 0).toLocaleString('vi-VN')}d</div>
+                        </div>
+                      ))}
+
+                      {receipt.status === 'CHO_XAC_NHAN' && (
+                        <div className="cod-receipt-note">
+                          <FiInfo size={13} />
+                          <span>Phieu nay dang cho admin xac nhan da nhan tien mat.</span>
+                        </div>
+                      )}
+
+                      {receipt.status === 'DA_XAC_NHAN' && receipt.confirmed_at && (
+                        <div className="cod-receipt-note">
+                          <FiInfo size={13} />
+                          <span>Admin da xac nhan luc {new Date(receipt.confirmed_at).toLocaleString('vi-VN')}.</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       {!loading && summary.orders.length > 0 && (
         <>
           <div className="cod-warn-box">
@@ -160,9 +227,9 @@ const CODReconciliation = () => {
         <div className="spinner-center"><div className="spinner" /> Dang tai danh sach COD...</div>
       ) : summary.orders.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">🎉</div>
-          <p>Khong co khoan tien nao can doi soat</p>
-          <span>Tat ca COD/phi thu ho da duoc nop hoac chua co don thu tien</span>
+          <div className="empty-state-icon">Tien</div>
+          <p>Khong co khoan tien nao can doi soat moi</p>
+          <span>Neu ban da gui phieu, no van nam o muc "Phieu doi soat da gui" cho toi khi admin xac nhan</span>
         </div>
       ) : (
         <>
@@ -175,6 +242,9 @@ const CODReconciliation = () => {
                   <div className="cod-order-info">
                     <div className="cod-order-code">{order.tracking_code}</div>
                     <div className="cod-order-name">{order.receiver_name}</div>
+                    {Number(order.cod_amount || 0) > 0 && (
+                      <div className="cod-order-name">COD: {Number(order.cod_amount).toLocaleString('vi-VN')}d</div>
+                    )}
                     {Number(order.receiver_fee_amount || 0) > 0 && (
                       <div className="cod-order-name">Phi ship/bao hiem tien mat: {Number(order.receiver_fee_amount).toLocaleString('vi-VN')}d</div>
                     )}

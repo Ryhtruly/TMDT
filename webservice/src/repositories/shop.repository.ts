@@ -83,6 +83,29 @@ export class ShopRepository {
     return result.rows;
   }
 
+  async getSupportedAreas() {
+    const result = await pool.query(`
+      SELECT DISTINCT ON (
+        LOWER(TRIM(a.province)),
+        LOWER(TRIM(a.district))
+      )
+        a.id_area,
+        a.province,
+        a.district,
+        a.area_type,
+        a.id_spoke,
+        s.spoke_name
+      FROM areas a
+      JOIN spokes s ON s.id_spoke = a.id_spoke
+      WHERE a.id_spoke IS NOT NULL
+      ORDER BY
+        LOWER(TRIM(a.province)),
+        LOWER(TRIM(a.district)),
+        a.id_area ASC
+    `);
+    return result.rows;
+  }
+
   async findAreaByProvinceDistrict(province: string, district: string) {
     const result = await pool.query('SELECT * FROM areas ORDER BY id_area ASC');
     return result.rows.find((row) => isSameArea(row.province, row.district, province, district)) || null;

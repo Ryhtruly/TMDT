@@ -5,6 +5,7 @@ import {
   isSameArea,
   isSameWardArea,
 } from '../utils/location';
+import { ORDER_STATUS, orderStatusVariants } from '../utils/orderStatus';
 import { deductWalletAndLog as deductWalletById, getSyncedWalletByUserId } from '../utils/walletDebt';
 
 export class ShipperRepository {
@@ -32,6 +33,7 @@ export class ShipperRepository {
       `
       SELECT o.id_order, o.tracking_code, o.receiver_name, o.receiver_phone,
              o.receiver_address, o.cod_amount, o.weight, o.status, o.created_at,
+             o.current_shipper_id, o.id_service_type,
              s.store_name, s.address as pickup_address, s.phone as pickup_phone,
              a.province, a.district,
              COALESCE(o.payer_type, 'SENDER') as payer_type,
@@ -123,6 +125,41 @@ export class ShipperRepository {
     return null;
   }
 
+  async canShipperHandleAddress(id_spoke: number, id_shipper: number, address: string) {
+    const parsed = extractProvinceDistrictWardFromAddress(address || '');
+    if (!parsed) return false;
+
+    const assignments = await this.getWardAssignmentsBySpoke(id_spoke);
+    if (!assignments.length) return false;
+
+    const exactWardAssignments = assignments.filter((assignment: any) =>
+      assignment.ward &&
+      isSameWardArea(
+        assignment.province,
+        assignment.district,
+        assignment.ward,
+        parsed.province,
+        parsed.district,
+        parsed.ward
+      )
+    );
+
+    if (exactWardAssignments.length > 0) {
+      return exactWardAssignments.some((assignment: any) => Number(assignment.id_shipper) === Number(id_shipper));
+    }
+
+    const districtFallbackAssignments = assignments.filter((assignment: any) =>
+      !assignment.ward &&
+      isSameArea(assignment.province, assignment.district, parsed.province, parsed.district)
+    );
+
+    if (districtFallbackAssignments.length > 0) {
+      return districtFallbackAssignments.some((assignment: any) => Number(assignment.id_shipper) === Number(id_shipper));
+    }
+
+    return false;
+  }
+
   async getOrdersToDeliver(id_spoke: number, id_user: number) {
     const result = await pool.query(
       `
@@ -158,6 +195,99 @@ export class ShipperRepository {
       ORDER BY o.created_at ASC
     `,
       [id_spoke, id_user]
+    );
+    return result.rows;
+  }
+
+  async getOrdersToWarehouse(id_user: number) {
+    const result = await pool.query(
+      `
+      SELECT o.id_order, o.tracking_code, o.receiver_name, o.receiver_phone,
+             o.receiver_address, o.cod_amount, o.weight, o.status, o.created_at,
+             o.current_shipper_id, o.id_service_type,
+             s.store_name, s.address as pickup_address, s.phone as pickup_phone,
+             a.province, a.district, a.id_spoke as dest_spoke,
+             sp.spoke_name as dest_spoke_name,
+             h.hub_name as dest_hub_name,
+             latest_log.action as latest_action,
+             latest_log.id_actor as latest_actor_id,
+             latest_log.created_at as latest_action_at,
+             COALESCE(o.payer_type, 'SENDER') as payer_type,
+             COALESCE(o.fee_payment_method, 'WALLET') as fee_payment_method
+      FROM orders o
+      JOIN stores s ON o.id_store = s.id_store
+      JOIN areas a ON o.id_dest_area = a.id_area
+      LEFT JOIN spokes sp ON sp.id_spoke = a.id_spoke
+      LEFT JOIN hubs h ON h.id_hub = sp.id_hub
+      LEFT JOIN LATERAL (
+        SELECT ol.action, ol.id_actor, ol.created_at
+        FROM order_logs ol
+        WHERE ol.id_order = o.id_order
+        ORDER BY ol.created_at DESC, ol.id_log DESC
+        LIMIT 1
+      ) latest_log ON TRUE
+      WHERE o.status = ANY($1::text[])
+        AND o.id_service_type != 3
+        AND o.current_shipper_id IS NULL
+        AND latest_log.action = 'LAY HANG THANH CONG'
+        AND latest_log.id_actor = $2
+      ORDER BY latest_log.created_at DESC, o.created_at ASC
+    `,
+      [
+        orderStatusVariants(ORDER_STATUS.PICKED_UP),
+        id_user,
+      ]
+    );
+    return result.rows;
+  }
+
+  async getOrdersToDeliverV2(id_spoke: number, id_user: number) {
+    const result = await pool.query(
+      `
+      SELECT o.id_order, o.tracking_code, o.receiver_name, o.receiver_phone,
+             o.receiver_address, o.cod_amount, o.weight, o.status, o.created_at,
+             o.current_shipper_id,
+             latest_log.action as latest_action,
+             a.province, a.district, a.id_spoke as dest_spoke,
+             COALESCE(o.payer_type, 'SENDER') as payer_type,
+             COALESCE(o.fee_payment_method, 'WALLET') as fee_payment_method,
+             COALESCE(o.shipping_fee, 0) as shipping_fee,
+             COALESCE(o.insurance_fee, 0) as insurance_fee,
+             (SELECT COUNT(*) FROM delivery_attempts da WHERE da.id_order = o.id_order) as attempt_count
+      FROM orders o
+      JOIN areas a ON o.id_dest_area = a.id_area
+      LEFT JOIN LATERAL (
+        SELECT ol.action
+        FROM order_logs ol
+        WHERE ol.id_order = o.id_order
+        ORDER BY ol.created_at DESC, ol.id_log DESC
+        LIMIT 1
+      ) latest_log ON TRUE
+      WHERE a.id_spoke = $1
+        AND (
+          (
+            o.status = ANY($3::text[])
+            AND latest_log.action = 'XUAT KHO -> GIAO CUOI'
+            AND (o.current_shipper_id IS NULL OR o.current_shipper_id = $2)
+          )
+          OR (
+            o.status = ANY($4::text[])
+            AND o.current_shipper_id = $2
+          )
+          OR (
+            o.status = ANY($5::text[])
+            AND (o.current_shipper_id IS NULL OR o.current_shipper_id = $2)
+          )
+        )
+      ORDER BY o.created_at ASC
+      `,
+      [
+        id_spoke,
+        id_user,
+        orderStatusVariants(ORDER_STATUS.PICKED_UP),
+        orderStatusVariants(ORDER_STATUS.DELIVERING),
+        orderStatusVariants(ORDER_STATUS.DELIVERY_FAILED),
+      ]
     );
     return result.rows;
   }
@@ -477,13 +607,44 @@ export class ShipperRepository {
   async getRecentCodReconciliations(id_user: number) {
     const result = await pool.query(
       `
-      SELECT *
+      SELECT scr.*,
+             COUNT(DISTINCT occ.id_order) AS linked_order_count
       FROM shipper_cod_reconciliations
-      WHERE id_shipper = $1
-      ORDER BY created_at DESC
+      scr
+      LEFT JOIN order_cash_collections occ ON occ.reconciliation_id = scr.id_reconciliation
+      WHERE scr.id_shipper = $1
+      GROUP BY scr.id_reconciliation
+      ORDER BY scr.created_at DESC
       LIMIT 10
     `,
       [id_user]
+    );
+    return result.rows;
+  }
+
+  async getReconciliationOrders(reconciliationIds: number[]) {
+    if (reconciliationIds.length === 0) return [];
+    const result = await pool.query(
+      `
+      SELECT
+        occ.reconciliation_id,
+        o.id_order,
+        o.tracking_code,
+        o.receiver_name,
+        o.receiver_phone,
+        o.receiver_address,
+        COALESCE(SUM(occ.collected_amount) FILTER (WHERE occ.collection_type = 'COD'), 0) as cod_amount,
+        COALESCE(SUM(occ.collected_amount) FILTER (WHERE occ.collection_type IN ('SHIPPING_FEE', 'INSURANCE_FEE')), 0) as receiver_fee_amount,
+        COALESCE(SUM(occ.collected_amount), 0) as cash_to_remit,
+        MIN(occ.collected_at) as first_collected_at,
+        MAX(occ.collected_at) as last_collected_at
+      FROM order_cash_collections occ
+      JOIN orders o ON o.id_order = occ.id_order
+      WHERE occ.reconciliation_id = ANY($1::int[])
+      GROUP BY occ.reconciliation_id, o.id_order
+      ORDER BY occ.reconciliation_id DESC, MAX(occ.collected_at) DESC, o.id_order DESC
+      `,
+      [reconciliationIds]
     );
     return result.rows;
   }

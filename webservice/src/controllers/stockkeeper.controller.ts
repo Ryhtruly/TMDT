@@ -47,6 +47,15 @@ export const getAlerts = async (req: AuthRequest, res: Response): Promise<void> 
     res.status(400).json({ status: 'error', message: error.message });
   }
 };
+
+export const getTransitOrders = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const data = await stockService.getTransitOrders(req.user.id_user);
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
 export const getBagSuggestions = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const groups = await stockService.getBagSuggestions(req.user.id_user);

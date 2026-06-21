@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import WarehouseScanner from './pages/stockkeeper/WarehouseScanner';
 import Inventory from './pages/stockkeeper/Inventory';
 import Bagging from './pages/stockkeeper/Bagging';
+import Transit from './pages/stockkeeper/Transit';
 
 const DashboardRedirect = () => {
   return <Navigate to="/inbound" replace />;
@@ -23,6 +24,7 @@ function App() {
           <Route path="outbound" element={<WarehouseScanner />} />
           <Route path="bagging" element={<Bagging />} />
           <Route path="inventory" element={<Inventory />} />
+          <Route path="transit" element={<Transit />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -101,6 +101,50 @@
   z-index: 3;
 }
 
+.inv-filter-bar {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.inv-search-box {
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  color: #64748b;
+}
+
+.inv-search-box input {
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.inv-filter-select {
+  min-width: 220px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
 .inv-loading {
   display: flex;
   flex-direction: column;
@@ -155,12 +199,41 @@
 .inv-card {
   background: white;
   border-radius: 16px;
-  padding: 20px;
   box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
   border: 1px solid #e2e8f0;
   transition: all 0.2s ease;
   position: relative;
   overflow: hidden;
+}
+
+.inv-copy-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.inv-copy-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.inv-copy-btn.copied {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
 }
 
 .inv-card:hover {
@@ -176,6 +249,21 @@
 
 .inv-card-danger:hover {
   border-color: #ef4444;
+}
+
+.inv-card-toggle {
+  width: 100%;
+  padding: 20px;
+  padding-top: 52px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.inv-card-expanded {
+  border-color: #93c5fd;
+  box-shadow: 0 14px 30px -18px rgba(37,99,235,0.45);
 }
 
 .inv-card-header {
@@ -197,6 +285,12 @@
   color: #0f172a;
 }
 
+.inv-header-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .inv-time {
   display: flex;
   align-items: center;
@@ -212,6 +306,18 @@
 .inv-card-danger .inv-time {
   background: #fee2e2;
   color: #ef4444;
+}
+
+.inv-expand-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  color: #2563eb;
+  flex-shrink: 0;
 }
 
 .inv-card-body {
@@ -257,4 +363,94 @@
   align-items: center;
   gap: 6px;
   justify-content: flex-end;
+}
+
+.inv-route-panel {
+  border-top: 1px dashed #cbd5e1;
+  padding: 16px 20px 20px;
+  background: linear-gradient(180deg, rgba(239,246,255,0.7) 0%, rgba(255,255,255,1) 100%);
+}
+
+.inv-route-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #1e3a8a;
+  margin-bottom: 14px;
+}
+
+.inv-route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.inv-route-item {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  min-height: 42px;
+}
+
+.inv-route-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  margin-top: 3px;
+  border: 3px solid white;
+  box-shadow: 0 0 0 1px #cbd5e1;
+  background: #cbd5e1;
+}
+
+.inv-route-dot.current {
+  background: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37,99,235,0.35), 0 0 0 6px rgba(37,99,235,0.1);
+}
+
+.inv-route-dot.completed {
+  background: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37,99,235,0.2);
+}
+
+.inv-route-dot.next {
+  background: #94a3b8;
+}
+
+.inv-route-dot.final {
+  background: #f97316;
+}
+
+.inv-route-item.active .inv-route-dot {
+  background: #2563eb;
+}
+
+.inv-route-item.active .inv-route-line {
+  background: linear-gradient(180deg, #60a5fa 0%, #93c5fd 100%);
+}
+
+.inv-route-line {
+  position: absolute;
+  left: 6px;
+  top: 18px;
+  width: 2px;
+  height: calc(100% + 4px);
+  background: linear-gradient(180deg, #cbd5e1 0%, #e2e8f0 100%);
+}
+
+.inv-route-content {
+  min-width: 0;
+}
+
+.inv-route-label {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.inv-route-meta {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin-top: 2px;
+  line-height: 1.4;
 }

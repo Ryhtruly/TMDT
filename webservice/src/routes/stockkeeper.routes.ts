@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { verifyToken, checkRoles } from '../middlewares/auth.middleware';
-import { scanInbound, scanOutbound, getInventory, getAlerts } from '../controllers/stockkeeper.controller';
+import { scanInbound, scanOutbound, getInventory, getAlerts, getTransitOrders } from '../controllers/stockkeeper.controller';
 
 const router = Router();
 
@@ -13,6 +13,9 @@ router.get('/inventory', getInventory);
 
 // Cảnh báo tồn kho quá 24h chưa điều phối
 router.get('/alerts', getAlerts);
+
+// Hàng đang trung chuyển giữa các kho
+router.get('/transit', getTransitOrders);
 
 // Quét mã nhập kho (hàng vào kho)
 // ĐÃ LẤY HÀNG / ĐANG TRUNG CHUYỂN → TẠI KHO

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { FiCheckCircle, FiClock, FiDollarSign, FiTruck } from 'react-icons/fi';
 import apiClient from '../api/client';
 
@@ -26,6 +26,7 @@ const Payouts = () => {
   const [shipperRows, setShipperRows] = useState<any[]>([]);
   const [payoutRows, setPayoutRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedShipperReceipt, setExpandedShipperReceipt] = useState<number | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -159,26 +160,85 @@ const Payouts = () => {
               </thead>
               <tbody>
                 {shipperRows.map((row) => (
-                  <tr key={row.id_reconciliation}>
-                    <td><span className="badge-id">SCR-{row.id_reconciliation}</span></td>
-                    <td>
-                      <div className="font-medium">{row.shipper_name || 'Shipper'}</div>
-                      <div style={{ fontSize: '0.78rem', color: '#9ca3af' }}>{row.shipper_phone}</div>
-                    </td>
-                    <td>{money(row.total_cod)}</td>
-                    <td>{money(row.total_receiver_fee)}</td>
-                    <td><strong style={{ color: '#047857' }}>{money(row.total_cash)}</strong></td>
-                    <td>{row.order_count || row.linked_order_count || 0}</td>
-                    <td>{dateTime(row.created_at)}</td>
-                    <td><span style={{ padding: '3px 10px', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700, ...statusStyle(row.status) }}>{statusText(row.status)}</span></td>
-                    <td className="text-right">
-                      {row.status === 'CHO_XAC_NHAN' ? (
-                        <button className="btn-primary" style={{ padding: '6px 14px' }} onClick={() => confirmShipperCash(row)}>
-                          Xac nhan da thu
-                        </button>
-                      ) : <span style={{ color: '#6b7280' }}>{dateTime(row.confirmed_at)}</span>}
-                    </td>
-                  </tr>
+                  <Fragment key={row.id_reconciliation}>
+                    <tr key={row.id_reconciliation}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="badge-id">SCR-{row.id_reconciliation}</span>
+                          <button
+                            className="btn-outline"
+                            style={{ padding: '4px 8px', fontSize: '0.78rem' }}
+                            onClick={() => setExpandedShipperReceipt(expandedShipperReceipt === row.id_reconciliation ? null : row.id_reconciliation)}
+                          >
+                            {expandedShipperReceipt === row.id_reconciliation ? 'An' : 'Xem'}
+                          </button>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="font-medium">{row.shipper_name || 'Shipper'}</div>
+                        <div style={{ fontSize: '0.78rem', color: '#9ca3af' }}>{row.shipper_phone}</div>
+                      </td>
+                      <td>{money(row.total_cod)}</td>
+                      <td>{money(row.total_receiver_fee)}</td>
+                      <td><strong style={{ color: '#047857' }}>{money(row.total_cash)}</strong></td>
+                      <td>{row.order_count || row.linked_order_count || 0}</td>
+                      <td>{dateTime(row.created_at)}</td>
+                      <td><span style={{ padding: '3px 10px', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700, ...statusStyle(row.status) }}>{statusText(row.status)}</span></td>
+                      <td className="text-right">
+                        {row.status === 'CHO_XAC_NHAN' ? (
+                          <button className="btn-primary" style={{ padding: '6px 14px' }} onClick={() => confirmShipperCash(row)}>
+                            Xac nhan da thu
+                          </button>
+                        ) : <span style={{ color: '#6b7280' }}>{dateTime(row.confirmed_at)}</span>}
+                      </td>
+                    </tr>
+                    {expandedShipperReceipt === row.id_reconciliation && (
+                      <tr key={`details-${row.id_reconciliation}`}>
+                        <td colSpan={9} style={{ background: '#f8fafc' }}>
+                          <div style={{ padding: '14px 16px' }}>
+                            <div style={{ fontWeight: 800, marginBottom: 10 }}>
+                              Chi tiet phieu SCR-{row.id_reconciliation}
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 12 }}>
+                              <div><strong>Tong COD:</strong> {money(row.total_cod)}</div>
+                              <div><strong>Phi tien mat:</strong> {money(row.total_receiver_fee)}</div>
+                              <div><strong>Tong tien:</strong> {money(row.total_cash)}</div>
+                              <div><strong>So don:</strong> {row.order_count || row.linked_order_count || 0}</div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {(row.orders || []).map((order: any) => (
+                                <div
+                                  key={`${row.id_reconciliation}-${order.tracking_code}`}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: 12,
+                                    background: 'white',
+                                    border: '1px solid #e5e7eb',
+                                    borderRadius: 12,
+                                    padding: '10px 12px',
+                                  }}
+                                >
+                                  <div>
+                                    <div style={{ fontWeight: 800 }}>{order.tracking_code}</div>
+                                    <div style={{ color: '#475569', fontSize: '0.9rem' }}>{order.receiver_name} - {order.receiver_phone}</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.82rem' }}>
+                                      COD: {money(order.cod_amount)} | Phi ship/bao hiem: {money(order.receiver_fee_amount)}
+                                    </div>
+                                  </div>
+                                  <div style={{ fontWeight: 800, color: '#047857' }}>{money(order.cash_to_remit)}</div>
+                                </div>
+                              ))}
+                              {(!row.orders || row.orders.length === 0) && (
+                                <div style={{ color: '#64748b' }}>Khong co chi tiet don trong phieu nay.</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
                 {shipperRows.length === 0 && (
                   <tr><td colSpan={9} className="empty-state">Chua co phieu shipper nop tien COD.</td></tr>

@@ -124,6 +124,49 @@
   overflow-y: auto;
 }
 
+.drawer-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid var(--slate-200);
+  border-radius: 10px;
+  background: white;
+}
+
+.drawer-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.drawer-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--slate-100);
+}
+
+.drawer-info-row:last-child {
+  border-bottom: none;
+}
+
+.drawer-info-row.multiline {
+  align-items: flex-start;
+}
+
+.drawer-info-label {
+  color: var(--slate-500);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.drawer-info-value {
+  font-weight: 600;
+  font-size: 14px;
+  text-align: right;
+  word-break: break-word;
+}
+
 .timeline {
   display: flex;
   flex-direction: column;

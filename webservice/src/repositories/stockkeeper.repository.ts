@@ -1,4 +1,5 @@
 import { pool } from '../config/db';
+import { ORDER_STATUS, orderStatusVariants } from '../utils/orderStatus';
 
 export class StockkeeperRepository {
   // Lấy Hub/Spoke mà thủ kho đang làm việc
@@ -85,13 +86,32 @@ export class StockkeeperRepository {
              wi.*,
              wi.last_updated as entered_at,
              wi.last_updated,
+             o.id_store,
+             o.id_dest_area,
              o.tracking_code, o.receiver_name, o.receiver_phone,
              o.receiver_address, o.status, o.weight, o.cod_amount,
              a.province, a.district, a.area_type,
+             wi.id_hub as current_hub_id,
+             wi.id_spoke as current_spoke_id,
+             COALESCE(current_hub.id_location, current_spoke.id_location) as current_location_id,
+             COALESCE(current_hub.hub_name, current_spoke.spoke_name) as current_warehouse_name,
+             current_hub.hub_name as current_hub_name,
+             current_spoke.spoke_name as current_spoke_name,
+             current_spoke.id_hub as current_spoke_hub_id,
+             current_spoke_hub.hub_name as current_spoke_hub_name,
+             dest_sp.spoke_name as dest_spoke_name,
+             dest_sp.id_spoke as dest_spoke_id,
+             dest_h.hub_name as dest_hub_name,
+             dest_h.id_hub as dest_hub_id,
              EXTRACT(EPOCH FROM (NOW() - wi.last_updated)) / 3600 as hours_in_warehouse
       FROM warehouse_inventory wi
       JOIN orders o ON wi.id_order = o.id_order
       JOIN areas a ON o.id_dest_area = a.id_area
+      LEFT JOIN hubs current_hub ON current_hub.id_hub = wi.id_hub
+      LEFT JOIN spokes current_spoke ON current_spoke.id_spoke = wi.id_spoke
+      LEFT JOIN hubs current_spoke_hub ON current_spoke_hub.id_hub = current_spoke.id_hub
+      LEFT JOIN spokes dest_sp ON dest_sp.id_spoke = a.id_spoke
+      LEFT JOIN hubs dest_h ON dest_h.id_hub = dest_sp.id_hub
       WHERE ($1::int IS NULL OR wi.id_hub = $1)
         AND ($2::int IS NULL OR wi.id_spoke = $2)
       ORDER BY wi.last_updated ASC
@@ -105,18 +125,85 @@ export class StockkeeperRepository {
       SELECT wi.id_order as id_inventory,
              wi.*,
              wi.last_updated as entered_at,
+             o.id_store,
+             o.id_dest_area,
              o.tracking_code, o.receiver_name, o.receiver_phone,
              o.receiver_address, o.status, a.province, a.district,
              wi.shelf_location,
+             wi.id_hub as current_hub_id,
+             wi.id_spoke as current_spoke_id,
+             COALESCE(current_hub.id_location, current_spoke.id_location) as current_location_id,
+             COALESCE(current_hub.hub_name, current_spoke.spoke_name) as current_warehouse_name,
+             current_hub.hub_name as current_hub_name,
+             current_spoke.spoke_name as current_spoke_name,
+             current_spoke.id_hub as current_spoke_hub_id,
+             current_spoke_hub.hub_name as current_spoke_hub_name,
+             dest_sp.spoke_name as dest_spoke_name,
+             dest_sp.id_spoke as dest_spoke_id,
+             dest_h.hub_name as dest_hub_name,
+             dest_h.id_hub as dest_hub_id,
              ROUND(EXTRACT(EPOCH FROM (NOW() - wi.last_updated)) / 3600, 1) as hours_in_warehouse
       FROM warehouse_inventory wi
       JOIN orders o ON wi.id_order = o.id_order
       JOIN areas a ON o.id_dest_area = a.id_area
+      LEFT JOIN hubs current_hub ON current_hub.id_hub = wi.id_hub
+      LEFT JOIN spokes current_spoke ON current_spoke.id_spoke = wi.id_spoke
+      LEFT JOIN hubs current_spoke_hub ON current_spoke_hub.id_hub = current_spoke.id_hub
+      LEFT JOIN spokes dest_sp ON dest_sp.id_spoke = a.id_spoke
+      LEFT JOIN hubs dest_h ON dest_h.id_hub = dest_sp.id_hub
       WHERE ($1::int IS NULL OR wi.id_hub = $1)
         AND ($2::int IS NULL OR wi.id_spoke = $2)
         AND wi.last_updated < NOW() - INTERVAL '24 hours'
       ORDER BY wi.last_updated ASC
     `, [id_hub, id_spoke]);
+    return result.rows;
+  }
+
+  async getTransitOrders() {
+    const result = await pool.query(`
+      WITH latest_log AS (
+        SELECT DISTINCT ON (ol.id_order)
+               ol.id_order,
+               ol.id_location,
+               ol.action,
+               ol.created_at
+        FROM order_logs ol
+        ORDER BY ol.id_order, ol.created_at DESC, ol.id_log DESC
+      )
+      SELECT o.id_order,
+             o.id_store,
+             o.id_dest_area,
+             o.tracking_code,
+             o.receiver_name,
+             o.receiver_phone,
+             o.receiver_address,
+             o.status,
+             o.is_return,
+             o.created_at,
+             a.province,
+             a.district,
+             a.area_type,
+             latest_log.id_location as last_location_id,
+             latest_log.action as last_action,
+             latest_log.created_at as departed_at,
+             last_loc.location_name as last_location_name,
+             last_loc.location_type as last_location_type,
+             EXTRACT(EPOCH FROM (NOW() - latest_log.created_at)) / 3600 as transit_hours
+      FROM orders o
+      JOIN areas a ON o.id_dest_area = a.id_area
+      JOIN latest_log ON latest_log.id_order = o.id_order
+      JOIN locations last_loc ON last_loc.id_location = latest_log.id_location
+      LEFT JOIN warehouse_inventory wi ON wi.id_order = o.id_order
+      WHERE wi.id_order IS NULL
+        AND (
+          o.status = ANY($1::text[])
+          OR o.status = ANY($2::text[])
+        )
+      ORDER BY latest_log.created_at DESC, o.id_order DESC
+    `, [
+      orderStatusVariants('IN_TRANSIT'),
+      orderStatusVariants('RETURNING'),
+    ]);
     return result.rows;
   }
 

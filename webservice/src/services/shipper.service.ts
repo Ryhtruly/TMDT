@@ -1,4 +1,5 @@
 import { ShipperRepository } from '../repositories/shipper.repository';
+import { ORDER_STATUS, orderStatusEquals, orderStatusIn } from '../utils/orderStatus';
 
 const shipperRepo = new ShipperRepository();
 
@@ -78,13 +79,28 @@ export class ShipperService {
         continue;
       }
 
-      const assignedShipperId = await shipperRepo.resolveAssignedShipperByAddress(
+      const isP2P = order.id_service_type === 3;
+      if (isP2P) {
+        if (!order.current_shipper_id) {
+          orders.push({ ...order, is_p2p_broadcast: true });
+        } else if (Number(order.current_shipper_id) === Number(id_user)) {
+          orders.push({ ...order, is_p2p_broadcast: false });
+        }
+        continue;
+      }
+
+      const canHandleOrder = await shipperRepo.canShipperHandleAddress(
         assignment.id_spoke,
+        id_user,
         order.pickup_address || ''
       );
 
-      if (!assignedShipperId || Number(assignedShipperId) === Number(id_user)) {
-        orders.push(order);
+      if (order.current_shipper_id && Number(order.current_shipper_id) !== Number(id_user)) {
+        continue;
+      }
+
+      if (canHandleOrder) {
+        orders.push({ ...order, is_p2p_broadcast: false });
       }
     }
 
@@ -97,7 +113,17 @@ export class ShipperService {
 
   async getDeliveryList(id_user: number) {
     const assignment = await this.getSpokeAssignment(id_user);
-    const orders = await shipperRepo.getOrdersToDeliver(assignment.id_spoke, id_user);
+    const orders = await shipperRepo.getOrdersToDeliverV2(assignment.id_spoke, id_user);
+    return {
+      assigned_spoke: assignment.spoke_name,
+      total: orders.length,
+      orders,
+    };
+  }
+
+  async getToWarehouseList(id_user: number) {
+    const assignment = await this.getSpokeAssignment(id_user);
+    const orders = await shipperRepo.getOrdersToWarehouse(id_user);
     return {
       assigned_spoke: assignment.spoke_name,
       total: orders.length,
@@ -114,7 +140,7 @@ export class ShipperService {
     ]);
 
     const activeDeliveries = deliveryData.orders.filter((order: any) =>
-      ['ĐÃ LẤY HÀNG', 'ĐANG GIAO'].includes(order.status)
+      orderStatusIn(order.status, [ORDER_STATUS.PICKED_UP, ORDER_STATUS.DELIVERING])
     );
 
     return {
@@ -127,6 +153,111 @@ export class ShipperService {
     };
   }
 
+  async acceptPickupOrder(id_user: number, tracking_code: string) {
+    const assignment = await this.getSpokeAssignment(id_user);
+    const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
+    const client = await shipperRepo.getTxClient();
+
+    try {
+      await client.query('BEGIN');
+
+      const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
+      if (!order) throw new Error(`Khong tim thay don hang: ${tracking_code}`);
+      if (!orderStatusEquals(order.status, ORDER_STATUS.WAITING_PICKUP)) {
+        throw new Error(`Khong the nhan don. Don dang o trang thai "${order.status}".`);
+      }
+
+      const originArea = await shipperRepo.resolveSpokeByAddress(order.store_address || '');
+      if (!originArea || Number(originArea.id_spoke) !== Number(assignment.id_spoke)) {
+        throw new Error('Don nay khong thuoc khu vuc lay hang cua ban.');
+      }
+
+      if (order.current_shipper_id) {
+        if (Number(order.current_shipper_id) === Number(id_user)) {
+          throw new Error('Ban da nhan don nay roi.');
+        }
+        throw new Error('Don nay da duoc shipper khac nhan.');
+      }
+
+      if (order.id_service_type !== 3) {
+        const canHandleOrder = await shipperRepo.canShipperHandleAddress(
+          assignment.id_spoke,
+          id_user,
+          order.store_address || ''
+        );
+        if (!canHandleOrder) {
+          throw new Error('Don nay khong thuoc phuong/khu vuc duoc giao cho ban.');
+        }
+      }
+
+      await shipperRepo.updateCurrentShipper(order.id_order, id_user, client);
+      await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'SHIPPER NHAN DON LAY HANG', null, client);
+
+      await client.query('COMMIT');
+
+      return {
+        tracking_code,
+        status: ORDER_STATUS.WAITING_PICKUP,
+        message: 'Nhan don thanh cong. Hay toi diem gui de lay hang.',
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async acceptP2pOrder(id_user: number, tracking_code: string) {
+    const assignment = await this.getSpokeAssignment(id_user);
+    const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
+    const client = await shipperRepo.getTxClient();
+
+    try {
+      await client.query('BEGIN');
+
+      const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
+      if (!order) throw new Error(`Khong tim thay don hang: ${tracking_code}`);
+
+      if (order.id_service_type !== 3) {
+        throw new Error('Day khong phai la don giao trong ngay (P2P).');
+      }
+
+      if (!orderStatusEquals(order.status, ORDER_STATUS.WAITING_PICKUP)) {
+        throw new Error(`Khong the nhan cuoc. Don dang o trang thai "${order.status}".`);
+      }
+
+      const originArea = await shipperRepo.resolveSpokeByAddress(order.store_address || '');
+      if (!originArea || Number(originArea.id_spoke) !== Number(assignment.id_spoke)) {
+        throw new Error('Don nay khong thuoc khu vuc cua ban.');
+      }
+
+      if (order.current_shipper_id) {
+        if (Number(order.current_shipper_id) === Number(id_user)) {
+          throw new Error('Ban da nhan cuoc nay roi.');
+        } else {
+          throw new Error('Don nay da bi shipper khac nhan mat.');
+        }
+      }
+
+      await shipperRepo.updateCurrentShipper(order.id_order, id_user, client);
+      await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'NHAN CUOC HOA TOC', null, client);
+
+      await client.query('COMMIT');
+
+      return {
+        tracking_code,
+        status: ORDER_STATUS.WAITING_PICKUP,
+        message: 'Nhan cuoc hoa toc thanh cong. Vui long toi lay hang.',
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async confirmPickup(id_user: number, tracking_code: string) {
     const assignment = await this.getSpokeAssignment(id_user);
     const idLocation = await shipperRepo.getSpokeLocation(assignment.id_spoke);
@@ -137,10 +268,10 @@ export class ShipperService {
 
       const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
       if (!order) throw new Error(`Khong tim thay don hang: ${tracking_code}`);
-      if (order.status === 'ĐÃ LẤY HÀNG' && order.latest_action === 'XUAT KHO -> GIAO CUOI') {
+      if (orderStatusEquals(order.status, ORDER_STATUS.PICKED_UP) && order.latest_action === 'XUAT KHO -> GIAO CUOI') {
         throw new Error('Don da san sang cho giao cuoi chang. Hay dung chuc nang "Bat dau giao".');
       }
-      if (order.status !== 'CHỜ LẤY HÀNG') {
+      if (!orderStatusEquals(order.status, ORDER_STATUS.WAITING_PICKUP)) {
         throw new Error(`Khong the lay hang. Don dang o trang thai "${order.status}".`);
       }
 
@@ -149,16 +280,24 @@ export class ShipperService {
         throw new Error('Don nay khong thuoc khu vuc lay hang cua ban.');
       }
 
-      const assignedShipperId = await shipperRepo.resolveAssignedShipperByAddress(
-        assignment.id_spoke,
-        order.store_address || ''
-      );
-      if (assignedShipperId && Number(assignedShipperId) !== Number(id_user)) {
-        throw new Error('Don nay da duoc he thong phan cho shipper khac trong khu vuc.');
+      const isSameDay = order.id_service_type === 3;
+      if (isSameDay) {
+        if (Number(order.current_shipper_id) !== Number(id_user)) {
+          throw new Error('Don hoa toc nay chua duoc ban nhan, hoac da bi shipper khac nhan.');
+        }
+      } else {
+        const canHandleOrder = await shipperRepo.canShipperHandleAddress(
+          assignment.id_spoke,
+          id_user,
+          order.store_address || ''
+        );
+        if (!canHandleOrder) {
+          throw new Error('Don nay khong thuoc phuong/khu vuc duoc giao cho ban.');
+        }
       }
 
-      await shipperRepo.updateOrderStatus(order.id_order, 'ĐÃ LẤY HÀNG', client);
-      await shipperRepo.updateCurrentShipper(order.id_order, null, client);
+      await shipperRepo.updateOrderStatus(order.id_order, ORDER_STATUS.PICKED_UP, client);
+      await shipperRepo.updateCurrentShipper(order.id_order, isSameDay ? id_user : null, client);
       const pickupCashItems = await shipperRepo.markCashCollectionsCollected(order.id_order, 'PICKUP', id_user, client);
       await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'LAY HANG THANH CONG', null, client);
 
@@ -438,11 +577,22 @@ export class ShipperService {
   }
 
   async getCodSummary(id_user: number) {
-    const orders = await shipperRepo.getPendingCashCollectionsByUser(id_user);
+    const [orders, reconciliations] = await Promise.all([
+      shipperRepo.getPendingCashCollectionsByUser(id_user),
+      shipperRepo.getRecentCodReconciliations(id_user),
+    ]);
+    const reconciliationIds = reconciliations.map((item: any) => Number(item.id_reconciliation));
+    const reconciliationOrders = await shipperRepo.getReconciliationOrders(reconciliationIds);
+    const reconciliationOrdersById = reconciliationOrders.reduce((acc: Record<number, any[]>, item: any) => {
+      const id = Number(item.reconciliation_id);
+      acc[id] = acc[id] || [];
+      acc[id].push(item);
+      return acc;
+    }, {});
+
     const totalCod = orders.reduce((sum: number, order: any) => sum + Number(order.cod_amount || 0), 0);
     const totalReceiverFee = orders.reduce((sum: number, order: any) => sum + Number(order.receiver_fee_amount || 0), 0);
     const totalCashHeld = orders.reduce((sum: number, order: any) => sum + Number(order.cash_to_remit || 0), 0);
-    const reconciliations = await shipperRepo.getRecentCodReconciliations(id_user);
 
     return {
       order_count: orders.length,
@@ -450,7 +600,10 @@ export class ShipperService {
       total_receiver_fee: totalReceiverFee,
       total_cash_held: totalCashHeld,
       orders,
-      recent_reconciliations: reconciliations,
+      recent_reconciliations: reconciliations.map((item: any) => ({
+        ...item,
+        orders: reconciliationOrdersById[Number(item.id_reconciliation)] || [],
+      })),
     };
   }
 
