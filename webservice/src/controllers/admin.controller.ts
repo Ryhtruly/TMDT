@@ -257,6 +257,25 @@ export const getAllOrders = async (req: Request, res: Response): Promise<void> =
 };
 
 // Lấy danh sách Bags (Admin)
+export const getReturns = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await adminService.getReturns();
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
+export const getReturnTimeline = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id_order = parseInt(String(req.params.id), 10);
+    const data = await adminService.getReturnTimeline(id_order);
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
 export const getAllBags = async (req: Request, res: Response): Promise<void> => {
   try {
     const data = await adminService.getAllBags();

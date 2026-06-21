@@ -1,4 +1,5 @@
 import { pool } from '../config/db';
+import { ORDER_STATUS, orderStatusVariants } from '../utils/orderStatus';
 
 export class AdminRepository {
   // Lấy danh sách Hub
@@ -222,6 +223,138 @@ export class AdminRepository {
     const countRes = await pool.query(`SELECT COUNT(*) FROM orders o ${countWhere}`, status ? [status] : []);
     
     return { rows: result.rows, total: parseInt(countRes.rows[0].count) };
+  }
+
+  async getReturns() {
+    const returnStatuses = [
+      ...orderStatusVariants(ORDER_STATUS.DELIVERY_FAILED),
+      ...orderStatusVariants(ORDER_STATUS.RETURNING),
+      ...orderStatusVariants(ORDER_STATUS.RETURNED),
+      ...orderStatusVariants(ORDER_STATUS.RETURN_COMPLETED),
+    ];
+
+    const result = await pool.query(
+      `
+      WITH latest_attempt AS (
+        SELECT DISTINCT ON (da.id_order)
+               da.id_order,
+               da.attempt_no,
+               da.reason_fail,
+               da.reason_code,
+               da.result,
+               da.created_at
+        FROM delivery_attempts da
+        ORDER BY da.id_order, da.attempt_no DESC, da.created_at DESC
+      ),
+      latest_log AS (
+        SELECT DISTINCT ON (ol.id_order)
+               ol.id_order,
+               ol.action,
+               ol.created_at,
+               l.location_name,
+               l.location_type
+        FROM order_logs ol
+        LEFT JOIN locations l ON l.id_location = ol.id_location
+        ORDER BY ol.id_order, ol.created_at DESC, ol.id_log DESC
+      ),
+      inventory AS (
+        SELECT wi.id_order,
+               wi.shelf_location,
+               wi.last_updated,
+               COALESCE(h.hub_name, sp.spoke_name) as current_warehouse_name
+        FROM warehouse_inventory wi
+        LEFT JOIN hubs h ON h.id_hub = wi.id_hub
+        LEFT JOIN spokes sp ON sp.id_spoke = wi.id_spoke
+      )
+      SELECT
+        o.id_order,
+        o.tracking_code,
+        o.status,
+        o.is_return,
+        o.return_fee,
+        o.shipping_fee,
+        o.insurance_fee,
+        o.cod_amount,
+        o.weight,
+        o.created_at,
+        o.receiver_name,
+        o.receiver_phone,
+        o.receiver_address,
+        st.store_name,
+        st.address as pickup_address,
+        st.phone as pickup_phone,
+        sh.shop_name,
+        u.phone as shop_phone,
+        a.province,
+        a.district,
+        sp.spoke_name as dest_spoke_name,
+        h.hub_name as dest_hub_name,
+        COALESCE(latest_attempt.attempt_no, 0) as attempt_count,
+        latest_attempt.reason_fail as last_fail_reason,
+        latest_attempt.reason_code as last_fail_code,
+        latest_attempt.created_at as last_attempt_at,
+        latest_log.action as last_action,
+        latest_log.created_at as last_action_at,
+        latest_log.location_name as last_location_name,
+        latest_log.location_type as last_location_type,
+        inventory.current_warehouse_name,
+        inventory.shelf_location,
+        inventory.last_updated as warehouse_updated_at
+      FROM orders o
+      JOIN stores st ON st.id_store = o.id_store
+      JOIN shops sh ON sh.id_shop = st.id_shop
+      LEFT JOIN users u ON u.id_user = sh.id_user
+      LEFT JOIN areas a ON a.id_area = o.id_dest_area
+      LEFT JOIN spokes sp ON sp.id_spoke = a.id_spoke
+      LEFT JOIN hubs h ON h.id_hub = sp.id_hub
+      LEFT JOIN latest_attempt ON latest_attempt.id_order = o.id_order
+      LEFT JOIN latest_log ON latest_log.id_order = o.id_order
+      LEFT JOIN inventory ON inventory.id_order = o.id_order
+      WHERE o.is_return = TRUE
+         OR o.status = ANY($1::text[])
+      ORDER BY
+        CASE
+          WHEN o.status = ANY($2::text[]) THEN 0
+          WHEN o.status = ANY($3::text[]) THEN 1
+          WHEN o.status = ANY($4::text[]) OR (o.is_return = TRUE AND o.status = ANY($5::text[])) THEN 2
+          ELSE 3
+        END,
+        COALESCE(latest_log.created_at, o.created_at) DESC
+      `,
+      [
+        returnStatuses,
+        orderStatusVariants(ORDER_STATUS.DELIVERY_FAILED),
+        orderStatusVariants(ORDER_STATUS.RETURNING),
+        orderStatusVariants(ORDER_STATUS.RETURNED),
+        orderStatusVariants(ORDER_STATUS.AT_WAREHOUSE),
+      ]
+    );
+
+    return result.rows;
+  }
+
+  async getReturnTimeline(id_order: number) {
+    const result = await pool.query(
+      `
+      SELECT
+        ol.id_log,
+        ol.action,
+        ol.evidence_url,
+        ol.created_at,
+        l.location_name,
+        l.location_type,
+        e.full_name as actor_name,
+        u.phone as actor_phone
+      FROM order_logs ol
+      LEFT JOIN locations l ON l.id_location = ol.id_location
+      LEFT JOIN users u ON u.id_user = ol.id_actor
+      LEFT JOIN employees e ON e.id_user = u.id_user
+      WHERE ol.id_order = $1
+      ORDER BY ol.created_at DESC, ol.id_log DESC
+      `,
+      [id_order]
+    );
+    return result.rows;
   }
 
   // Lấy danh sách Bags

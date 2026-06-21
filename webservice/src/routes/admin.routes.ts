@@ -10,6 +10,7 @@ import {
   createShipperWardAssignment, deleteShipperWardAssignment, autoGenerateRoute,
   getOrderDetailByTracking, toggleRoute,
   assignSpokeToHub, unassignSpokeFromHub, assignAreaToSpoke, unassignAreaFromSpoke,
+  getReturns, getReturnTimeline,
   completeReturn
 } from '../controllers/admin.controller';
 
@@ -75,6 +76,8 @@ router.get('/shops', getAllShops);
 
 // Đơn hàng toàn hệ thống
 router.get('/orders', getAllOrders);
+router.get('/returns', getReturns);
+router.get('/returns/:id/timeline', getReturnTimeline);
 router.post('/returns/:id/complete', completeReturn);
 
 // Bao kiện

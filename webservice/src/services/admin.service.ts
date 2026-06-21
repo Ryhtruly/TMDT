@@ -420,6 +420,44 @@ export class AdminService {
     return await adminRepo.getAllOrders(status, limit, offset);
   }
 
+  async getReturns() {
+    const rows = await adminRepo.getReturns();
+    const { ORDER_STATUS, orderStatusIn } = require('../utils/orderStatus');
+
+    const summary = {
+      total: rows.length,
+      failed: 0,
+      returning: 0,
+      returned: 0,
+      completed: 0,
+      return_fee_total: 0,
+      cod_total: 0,
+    };
+
+    const enriched = rows.map((row: any) => {
+      let return_stage = 'OTHER';
+      if (orderStatusIn(row.status, [ORDER_STATUS.DELIVERY_FAILED])) return_stage = 'FAILED';
+      else if (orderStatusIn(row.status, [ORDER_STATUS.RETURNING])) return_stage = 'RETURNING';
+      else if (orderStatusIn(row.status, [ORDER_STATUS.RETURNED, ORDER_STATUS.AT_WAREHOUSE])) return_stage = 'READY_TO_RETURN';
+      else if (orderStatusIn(row.status, [ORDER_STATUS.RETURN_COMPLETED])) return_stage = 'COMPLETED';
+
+      if (return_stage === 'FAILED') summary.failed += 1;
+      if (return_stage === 'RETURNING') summary.returning += 1;
+      if (return_stage === 'READY_TO_RETURN') summary.returned += 1;
+      if (return_stage === 'COMPLETED') summary.completed += 1;
+      summary.return_fee_total += Number(row.return_fee || 0);
+      summary.cod_total += Number(row.cod_amount || 0);
+
+      return { ...row, return_stage };
+    });
+
+    return { rows: enriched, summary };
+  }
+
+  async getReturnTimeline(id_order: number) {
+    return await adminRepo.getReturnTimeline(id_order);
+  }
+
   async getAllBags() {
     return await adminRepo.getAllBags();
   }
@@ -470,6 +508,7 @@ export class AdminService {
 
     return await adminRepo.createShipperWardAssignment({
       id_shipper: parseInt(id_shipper),
+
       id_spoke: parseInt(id_spoke),
       province: String(province).trim(),
       district: String(district).trim(),
@@ -532,23 +571,38 @@ export class AdminService {
     const client = await adminRepo.getTxClient();
     try {
       await client.query('BEGIN');
-      const orderRes = await client.query('SELECT status FROM orders WHERE id_order = $1 FOR UPDATE', [id_order]);
+      const orderRes = await client.query(
+        `SELECT o.status, o.is_return, o.id_store, st.id_shop, s.id_user,
+                COALESCE(l.id_location, 1) as id_location
+         FROM orders o
+         JOIN stores st ON st.id_store = o.id_store
+         JOIN shops s ON s.id_shop = st.id_shop
+         LEFT JOIN locations l ON l.id_location = (SELECT id_location FROM spokes LIMIT 1)
+         WHERE o.id_order = $1 FOR UPDATE OF o`,
+        [id_order]
+      );
       if (!orderRes.rows[0]) throw new Error('Không tìm thấy đơn hàng.');
 
-      const { status } = orderRes.rows[0];
+      const { status, is_return, id_location } = orderRes.rows[0];
       const { ORDER_STATUS } = require('../utils/orderStatus');
 
-      if (status !== ORDER_STATUS.RETURNED && status !== ORDER_STATUS.RETURNING) {
+      const canComplete =
+        status === ORDER_STATUS.RETURNED ||
+        status === ORDER_STATUS.RETURNING ||
+        (is_return === true && status === ORDER_STATUS.AT_WAREHOUSE);
+
+      if (!canComplete) {
         throw new Error(`Chỉ có thể xác nhận trả shop khi đơn ở trạng thái Hoàn hàng. Hiện tại: ${status}`);
       }
 
       await client.query('UPDATE orders SET status = $1 WHERE id_order = $2', [ORDER_STATUS.RETURN_COMPLETED, id_order]);
 
-      // Ghi log
-      await client.query(`
-        INSERT INTO order_logs (id_order, action)
-        VALUES ($1, 'XÁC NHẬN ĐÃ TRẢ SHOP')
-      `, [id_order]);
+      // Ghi log — id_actor = 1 (System Admin), id_location từ query
+      await client.query(
+        `INSERT INTO order_logs (id_order, id_location, id_actor, action)
+         VALUES ($1, $2, $3, 'XÁC NHẬN ĐÃ TRẢ SHOP')`,
+        [id_order, id_location, 1]
+      );
 
       await client.query('COMMIT');
       return { id_order, status: ORDER_STATUS.RETURN_COMPLETED, message: 'Xác nhận đã trả shop thành công.' };
