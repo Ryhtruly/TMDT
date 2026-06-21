@@ -1,9 +1,8 @@
-﻿import { pool } from '../config/db';
-import { extractProvinceDistrictFromAddress, isSameArea } from '../utils/location';
+import { pool } from '../config/db';
 import { ORDER_STATUS, orderStatusVariants } from '../utils/orderStatus';
 
 export class StockkeeperRepository {
-  // Láº¥y Hub/Spoke mÃ  thá»§ kho Ä‘ang lÃ m viá»‡c
+  // Lấy Hub/Spoke mà thủ kho đang làm việc
   async getStockkeeperAssignment(id_user: number) {
     const result = await pool.query(`
       SELECT ea.id_hub, ea.id_spoke, ea.is_active,
@@ -19,13 +18,12 @@ export class StockkeeperRepository {
     return result.rows[0] || null;
   }
 
-  // TÃ¬m Ä‘Æ¡n hÃ ng theo tracking code
+  // Tìm đơn hàng theo tracking code
   async findOrderByTracking(tracking_code: string) {
     const result = await pool.query(`
       SELECT o.*,
              a.id_spoke as dest_spoke,
              s.id_hub as dest_hub,
-             st.address as store_address,
              wi.id_hub as current_hub,
              wi.id_spoke as current_spoke,
              wi.shelf_location,
@@ -33,14 +31,13 @@ export class StockkeeperRepository {
       FROM orders o
       LEFT JOIN areas a ON o.id_dest_area = a.id_area
       LEFT JOIN spokes s ON a.id_spoke = s.id_spoke
-      LEFT JOIN stores st ON o.id_store = st.id_store
       LEFT JOIN warehouse_inventory wi ON wi.id_order = o.id_order
       WHERE o.tracking_code = $1
     `, [tracking_code]);
     return result.rows[0] || null;
   }
 
-  // Kiá»ƒm tra Ä‘Æ¡n Ä‘Ã£ nháº­p kho TRÆ¯á»šC ÄÃ“ táº¡i kho nÃ y chÆ°a (rÃ ng buá»™c: khÃ´ng xuáº¥t náº¿u chÆ°a nháº­p)
+  // Kiểm tra đơn đã nhập kho TRƯỚC ĐÓ tại kho này chưa (ràng buộc: không xuất nếu chưa nhập)
   async findInventoryRecord(id_order: number, id_hub: number | null, id_spoke: number | null) {
     const result = await pool.query(`
       SELECT * FROM warehouse_inventory
@@ -49,23 +46,23 @@ export class StockkeeperRepository {
     return result.rows[0] || null;
   }
 
-  // NHáº¬P KHO: ThÃªm/cáº­p nháº­t báº£n ghi tá»“n kho
+  // NHẬP KHO: Thêm/cập nhật bản ghi tồn kho
   async upsertInventory(id_order: number, id_hub: number | null, id_spoke: number | null, shelf_location: string | null, client: any) {
-    // XÃ³a báº£n ghi cÅ© náº¿u cÃ³ (hÃ ng di chuyá»ƒn tá»« kho nÃ y sang kho khÃ¡c)
+    // Xóa bản ghi cũ nếu có (hàng di chuyển từ kho này sang kho khác)
     await client.query('DELETE FROM warehouse_inventory WHERE id_order = $1', [id_order]);
-
+    
     await client.query(`
       INSERT INTO warehouse_inventory (id_order, id_hub, id_spoke, shelf_location, last_updated)
       VALUES ($1, $2, $3, $4, NOW())
     `, [id_order, id_hub, id_spoke, shelf_location]);
   }
 
-  // XUáº¤T KHO: XÃ³a báº£n ghi tá»“n kho
+  // XUẤT KHO: Xóa bản ghi tồn kho
   async removeInventory(id_order: number, client: any) {
     await client.query('DELETE FROM warehouse_inventory WHERE id_order = $1', [id_order]);
   }
 
-  // Cáº­p nháº­t tráº¡ng thÃ¡i Ä‘Æ¡n hÃ ng
+  // Cập nhật trạng thái đơn hàng
   async updateOrderStatus(id_order: number, status: string, client: any) {
     await client.query('UPDATE orders SET status = $1 WHERE id_order = $2', [status, id_order]);
   }
@@ -74,7 +71,7 @@ export class StockkeeperRepository {
     await client.query('UPDATE orders SET current_shipper_id = $1 WHERE id_order = $2', [id_shipper, id_order]);
   }
 
-  // Ghi log vÃ o order_logs
+  // Ghi log vào order_logs
   async insertOrderLog(id_order: number, id_location: number, id_actor: number, action: string, client: any) {
     await client.query(`
       INSERT INTO order_logs (id_order, id_location, id_actor, action)
@@ -82,25 +79,37 @@ export class StockkeeperRepository {
     `, [id_order, id_location, id_actor, action]);
   }
 
-  // Xem danh sÃ¡ch hÃ ng Ä‘ang trong kho cá»§a mÃ¬nh
+  // Xem danh sách hàng đang trong kho của mình
   async getInventoryList(id_hub: number | null, id_spoke: number | null) {
     const result = await pool.query(`
       SELECT wi.id_order as id_inventory,
              wi.*,
              wi.last_updated as entered_at,
              wi.last_updated,
+             o.id_store,
+             o.id_dest_area,
              o.tracking_code, o.receiver_name, o.receiver_phone,
              o.receiver_address, o.status, o.weight, o.cod_amount,
              a.province, a.district, a.area_type,
-             COALESCE(h.hub_name, sp.spoke_name) as current_warehouse_name,
+             wi.id_hub as current_hub_id,
+             wi.id_spoke as current_spoke_id,
+             COALESCE(current_hub.id_location, current_spoke.id_location) as current_location_id,
+             COALESCE(current_hub.hub_name, current_spoke.spoke_name) as current_warehouse_name,
+             current_hub.hub_name as current_hub_name,
+             current_spoke.spoke_name as current_spoke_name,
+             current_spoke.id_hub as current_spoke_hub_id,
+             current_spoke_hub.hub_name as current_spoke_hub_name,
              dest_sp.spoke_name as dest_spoke_name,
+             dest_sp.id_spoke as dest_spoke_id,
              dest_h.hub_name as dest_hub_name,
+             dest_h.id_hub as dest_hub_id,
              EXTRACT(EPOCH FROM (NOW() - wi.last_updated)) / 3600 as hours_in_warehouse
       FROM warehouse_inventory wi
       JOIN orders o ON wi.id_order = o.id_order
       JOIN areas a ON o.id_dest_area = a.id_area
-      LEFT JOIN hubs h ON h.id_hub = wi.id_hub
-      LEFT JOIN spokes sp ON sp.id_spoke = wi.id_spoke
+      LEFT JOIN hubs current_hub ON current_hub.id_hub = wi.id_hub
+      LEFT JOIN spokes current_spoke ON current_spoke.id_spoke = wi.id_spoke
+      LEFT JOIN hubs current_spoke_hub ON current_spoke_hub.id_hub = current_spoke.id_hub
       LEFT JOIN spokes dest_sp ON dest_sp.id_spoke = a.id_spoke
       LEFT JOIN hubs dest_h ON dest_h.id_hub = dest_sp.id_hub
       WHERE ($1::int IS NULL OR wi.id_hub = $1)
@@ -110,24 +119,36 @@ export class StockkeeperRepository {
     return result.rows;
   }
 
-  // Cáº£nh bÃ¡o: ÄÆ¡n tá»“n kho quÃ¡ 24h chÆ°a Ä‘Æ°á»£c Ä‘iá»u phá»‘i (theo Docx)
+  // Cảnh báo: Đơn tồn kho quá 24h chưa được điều phối (theo Docx)
   async getOverdueAlerts(id_hub: number | null, id_spoke: number | null) {
     const result = await pool.query(`
       SELECT wi.id_order as id_inventory,
              wi.*,
              wi.last_updated as entered_at,
+             o.id_store,
+             o.id_dest_area,
              o.tracking_code, o.receiver_name, o.receiver_phone,
              o.receiver_address, o.status, a.province, a.district,
              wi.shelf_location,
-             COALESCE(h.hub_name, sp.spoke_name) as current_warehouse_name,
+             wi.id_hub as current_hub_id,
+             wi.id_spoke as current_spoke_id,
+             COALESCE(current_hub.id_location, current_spoke.id_location) as current_location_id,
+             COALESCE(current_hub.hub_name, current_spoke.spoke_name) as current_warehouse_name,
+             current_hub.hub_name as current_hub_name,
+             current_spoke.spoke_name as current_spoke_name,
+             current_spoke.id_hub as current_spoke_hub_id,
+             current_spoke_hub.hub_name as current_spoke_hub_name,
              dest_sp.spoke_name as dest_spoke_name,
+             dest_sp.id_spoke as dest_spoke_id,
              dest_h.hub_name as dest_hub_name,
+             dest_h.id_hub as dest_hub_id,
              ROUND(EXTRACT(EPOCH FROM (NOW() - wi.last_updated)) / 3600, 1) as hours_in_warehouse
       FROM warehouse_inventory wi
       JOIN orders o ON wi.id_order = o.id_order
       JOIN areas a ON o.id_dest_area = a.id_area
-      LEFT JOIN hubs h ON h.id_hub = wi.id_hub
-      LEFT JOIN spokes sp ON sp.id_spoke = wi.id_spoke
+      LEFT JOIN hubs current_hub ON current_hub.id_hub = wi.id_hub
+      LEFT JOIN spokes current_spoke ON current_spoke.id_spoke = wi.id_spoke
+      LEFT JOIN hubs current_spoke_hub ON current_spoke_hub.id_hub = current_spoke.id_hub
       LEFT JOIN spokes dest_sp ON dest_sp.id_spoke = a.id_spoke
       LEFT JOIN hubs dest_h ON dest_h.id_hub = dest_sp.id_hub
       WHERE ($1::int IS NULL OR wi.id_hub = $1)
@@ -135,6 +156,54 @@ export class StockkeeperRepository {
         AND wi.last_updated < NOW() - INTERVAL '24 hours'
       ORDER BY wi.last_updated ASC
     `, [id_hub, id_spoke]);
+    return result.rows;
+  }
+
+  async getTransitOrders() {
+    const result = await pool.query(`
+      WITH latest_log AS (
+        SELECT DISTINCT ON (ol.id_order)
+               ol.id_order,
+               ol.id_location,
+               ol.action,
+               ol.created_at
+        FROM order_logs ol
+        ORDER BY ol.id_order, ol.created_at DESC, ol.id_log DESC
+      )
+      SELECT o.id_order,
+             o.id_store,
+             o.id_dest_area,
+             o.tracking_code,
+             o.receiver_name,
+             o.receiver_phone,
+             o.receiver_address,
+             o.status,
+             o.is_return,
+             o.created_at,
+             a.province,
+             a.district,
+             a.area_type,
+             latest_log.id_location as last_location_id,
+             latest_log.action as last_action,
+             latest_log.created_at as departed_at,
+             last_loc.location_name as last_location_name,
+             last_loc.location_type as last_location_type,
+             EXTRACT(EPOCH FROM (NOW() - latest_log.created_at)) / 3600 as transit_hours
+      FROM orders o
+      JOIN areas a ON o.id_dest_area = a.id_area
+      JOIN latest_log ON latest_log.id_order = o.id_order
+      JOIN locations last_loc ON last_loc.id_location = latest_log.id_location
+      LEFT JOIN warehouse_inventory wi ON wi.id_order = o.id_order
+      WHERE wi.id_order IS NULL
+        AND (
+          o.status = ANY($1::text[])
+          OR o.status = ANY($2::text[])
+        )
+      ORDER BY latest_log.created_at DESC, o.id_order DESC
+    `, [
+      orderStatusVariants('IN_TRANSIT'),
+      orderStatusVariants('RETURNING'),
+    ]);
     return result.rows;
   }
 
@@ -148,7 +217,7 @@ export class StockkeeperRepository {
       LEFT JOIN (
         SELECT current_shipper_id, COUNT(*) as active_orders
         FROM orders
-        WHERE status = ANY($2::text[])
+        WHERE status = 'ĐANG GIAO'
           AND current_shipper_id IS NOT NULL
         GROUP BY current_shipper_id
       ) loads ON loads.current_shipper_id = swa.id_shipper
@@ -156,7 +225,7 @@ export class StockkeeperRepository {
         AND swa.is_active = TRUE
       ORDER BY swa.priority ASC, COALESCE(loads.active_orders, 0) ASC, swa.id_shipper ASC
     `,
-      [id_spoke, orderStatusVariants(ORDER_STATUS.DELIVERING)]
+      [id_spoke]
     );
     return result.rows;
   }
@@ -165,31 +234,14 @@ export class StockkeeperRepository {
     return await pool.connect();
   }
 
-  // Resolve Spoke/Hub tá»« Ä‘á»‹a chá»‰ text (address string)
-  async resolveSpokeAndHubByAddress(address: string) {
-    const parsed = extractProvinceDistrictFromAddress(address || '');
-    if (!parsed) return null;
-
-    const result = await pool.query(`
-      SELECT a.id_spoke, a.province, a.district, s.id_hub
-      FROM areas a
-      JOIN spokes s ON a.id_spoke = s.id_spoke
-      ORDER BY a.id_area ASC
-    `);
-
-    return result.rows.find((row: any) =>
-      isSameArea(row.province || '', row.district || '', parsed.province, parsed.district)
-    ) || null;
-  }
-
   // BAGS - Smart Next-Hop Grouping
-  // XÃ¡c Ä‘á»‹nh "next hop" cá»§a má»—i Ä‘Æ¡n dá»±a trÃªn areaâ†’spokeâ†’hub mapping
-  // Náº¿u Ä‘Æ¡n Ä‘ang á»Ÿ Hub A vÃ  dest_hub khÃ¡c Hub A â†’ cáº§n gom bao vá» Hub dest
-  // Náº¿u Ä‘Æ¡n Ä‘ang á»Ÿ Hub mÃ  dest_hub = Hub nÃ y â†’ gom bao vá» Spoke Ä‘Ã­ch (local delivery)
+  // Xác định "next hop" của mỗi đơn dựa trên area→spoke→hub mapping
+  // Nếu đơn đang ở Hub A và dest_hub khác Hub A → cần gom bao về Hub dest
+  // Nếu đơn đang ở Hub mà dest_hub = Hub này → gom bao về Spoke đích (local delivery)
   async getOrdersForBagging(id_hub: number | null, id_spoke: number | null) {
     const result = await pool.query(`
       WITH order_dest AS (
-        SELECT
+        SELECT 
           wi.id_order,
           wi.last_updated,
           wi.id_hub as current_hub_id,
@@ -218,8 +270,8 @@ export class StockkeeperRepository {
           )
       )
       SELECT *,
-        -- Náº¿u dest_hub khÃ¡c hub hiá»‡n táº¡i â†’ next_hop lÃ  Hub Ä‘Ã­ch (inter-hub transit)
-        -- Náº¿u cÃ¹ng hub â†’ next_hop lÃ  Spoke Ä‘Ã­ch (local last-mile)
+        -- Nếu dest_hub khác hub hiện tại → next_hop là Hub đích (inter-hub transit)
+        -- Nếu cùng hub → next_hop là Spoke đích (local last-mile)
         CASE
           WHEN current_hub_id IS NOT NULL AND dest_hub_id IS NOT NULL AND dest_hub_id != current_hub_id
             THEN 'HUB'
@@ -239,7 +291,7 @@ export class StockkeeperRepository {
             THEN dest_hub_name
           WHEN dest_spoke_name IS NOT NULL
             THEN dest_spoke_name
-          ELSE 'Äiá»ƒm Ä‘áº¿n khÃ´ng xÃ¡c Ä‘á»‹nh'
+          ELSE 'Điểm đến không xác định'
         END as next_hop_name
       FROM order_dest
       ORDER BY next_hop_name, tracking_code

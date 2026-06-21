@@ -1,7 +1,6 @@
+import './env';
+
 const { PayOS } = require('@payos/node');
-const dotenv = require('dotenv');
-// Force override để đảm bảo luôn nạp key mới nhất nếu .env bị cache
-dotenv.config({ override: true });
 
 const PAYOS_CLIENT_ID = (process.env.PAYOS_CLIENT_ID || '').replace(/['"]/g, '').trim();
 const PAYOS_API_KEY = (process.env.PAYOS_API_KEY || '').replace(/['"]/g, '').trim();

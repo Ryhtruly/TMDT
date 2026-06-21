@@ -4,6 +4,13 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 
 const shopService = new ShopService();
 
+const logOtpError = (action: string, phone: unknown, error: any) => {
+  console.error(`[ShopController][PID ${process.pid}] ${action} failed`, {
+    phone,
+    error: error?.message || String(error)
+  });
+};
+
 // 1. Đăng ký Shop (Public - không cần Token)
 export const registerShop = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -21,12 +28,14 @@ export const registerShop = async (req: Request, res: Response): Promise<void> =
 export const sendOtp = async (req: Request, res: Response): Promise<void> => {
   try {
     const { phone } = req.body;
+    console.log(`[ShopController][PID ${process.pid}] send-otp request`, { phone });
     await shopService.sendOtp(phone, false);
     res.json({
       status: 'success',
       message: 'Mã OTP đăng ký đã được gửi.'
     });
   } catch (error: any) {
+    logOtpError('sendOtp', req.body?.phone, error);
     res.status(400).json({ status: 'error', message: error.message });
   }
 };
@@ -34,12 +43,14 @@ export const sendOtp = async (req: Request, res: Response): Promise<void> => {
 export const sendOtpForgot = async (req: Request, res: Response): Promise<void> => {
   try {
     const { phone } = req.body;
+    console.log(`[ShopController][PID ${process.pid}] send-otp-forgot request`, { phone });
     await shopService.sendOtp(phone, true);
     res.json({
       status: 'success',
       message: 'Mã OTP khôi phục mật khẩu đã được gửi.'
     });
   } catch (error: any) {
+    logOtpError('sendOtpForgot', req.body?.phone, error);
     res.status(400).json({ status: 'error', message: error.message });
   }
 };
@@ -47,12 +58,14 @@ export const sendOtpForgot = async (req: Request, res: Response): Promise<void> 
 export const verifyOtp = async (req: Request, res: Response): Promise<void> => {
   try {
     const { phone, otp } = req.body;
+    console.log(`[ShopController][PID ${process.pid}] verify-otp request`, { phone });
     await shopService.verifyOtp(phone, otp);
     res.json({
       status: 'success',
       message: 'Xác thực OTP thành công.'
     });
   } catch (error: any) {
+    logOtpError('verifyOtp', req.body?.phone, error);
     res.status(400).json({ status: 'error', message: error.message });
   }
 };
@@ -65,6 +78,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       message: 'Đổi mật khẩu thành công! Vui lòng đăng nhập lại.'
     });
   } catch (error: any) {
+    logOtpError('resetPassword', req.body?.phone, error);
     res.status(400).json({ status: 'error', message: error.message });
   }
 };
@@ -232,6 +246,15 @@ export const getCashflowReport = async (req: AuthRequest, res: Response): Promis
 export const getSpokes = async (req: Request, res: Response): Promise<void> => {
   try {
     const data = await shopService.getSpokes();
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
+export const getSupportedAreas = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await shopService.getSupportedAreas();
     res.json({ status: 'success', data });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });

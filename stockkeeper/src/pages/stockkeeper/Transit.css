@@ -1,0 +1,251 @@
+.transit-page {
+  padding: 32px;
+  background: #f8fafc;
+  min-height: 100vh;
+  color: #0f172a;
+}
+
+.transit-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 24px 28px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+  margin-bottom: 24px;
+}
+
+.transit-hero h1 {
+  margin: 0 0 8px;
+  font-size: 1.9rem;
+  color: #1d4ed8;
+}
+
+.transit-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.transit-summary {
+  display: flex;
+  gap: 14px;
+}
+
+.transit-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  min-width: 140px;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.transit-summary-card.incoming {
+  background: #ecfeff;
+  color: #0f766e;
+  border-color: #99f6e4;
+}
+
+.transit-summary-card strong,
+.transit-summary-card span {
+  display: block;
+}
+
+.transit-summary-card span {
+  font-size: 0.85rem;
+  margin-top: 3px;
+}
+
+.transit-filter-bar {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 16px 18px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.transit-search-box {
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  color: #64748b;
+}
+
+.transit-search-box input {
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.transit-filter-select {
+  min-width: 220px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.transit-section {
+  margin-bottom: 28px;
+}
+
+.transit-section-title {
+  margin-bottom: 14px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.transit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.transit-card {
+  background: white;
+  border-radius: 18px;
+  padding: 18px;
+  border: 1px solid #dbeafe;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.transit-card.incoming {
+  border-color: #ccfbf1;
+}
+
+.transit-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.transit-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.transit-hours {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.transit-direction {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+  margin-bottom: 16px;
+}
+
+.transit-card.incoming .transit-direction {
+  background: linear-gradient(135deg, #f8fafc 0%, #ecfeff 100%);
+}
+
+.transit-stop {
+  min-width: 0;
+}
+
+.transit-stop strong {
+  display: block;
+  color: #0f172a;
+}
+
+.transit-stop-label {
+  display: block;
+  color: #64748b;
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
+
+.transit-arrow {
+  color: #3b82f6;
+}
+
+.transit-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.transit-label {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.transit-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.transit-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.transit-badge.outbound {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.transit-badge.incoming {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.transit-empty {
+  padding: 24px;
+  text-align: center;
+  background: white;
+  border-radius: 16px;
+  border: 1px dashed #cbd5e1;
+  color: #64748b;
+  font-weight: 600;
+}

@@ -13,6 +13,7 @@ import {
   cancelOrder,
   getCashflowReport,
   getSpokes,
+  getSupportedAreas,
   resolveDestArea
 } from '../controllers/shop.controller';
 
@@ -83,6 +84,7 @@ router.get('/cashflow', getCashflowReport);
 
 // Danh sách Bưu cục
 router.get('/spokes', getSpokes);
+router.get('/areas/supported', getSupportedAreas);
 router.get('/areas/resolve', resolveDestArea);
 
 export default router;

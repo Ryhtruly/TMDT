@@ -12,10 +12,6 @@ export class GeneralService {
   // === COD PAYOUT: shop requests APP to transfer reconciled COD to a bank account ===
   async requestCodPayout(id_user: number, id_bank: number) {
     const today = new Date();
-    const dayOfWeek = today.getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      throw new Error('COD payout chi thuc hien vao T2-T6.');
-    }
     if (!id_bank) throw new Error('Vui long chon tai khoan ngan hang nhan COD.');
 
     const bank = await repo.findBankByUser(id_user, id_bank);
@@ -58,13 +54,17 @@ export class GeneralService {
       });
 
       await client.query('COMMIT');
+      const requestDay = today.getDay();
+      const isWeekend = requestDay === 0 || requestDay === 6;
       return {
         ...payout,
         order_count: orders.length,
         bank_name: bank.bank_name,
         account_number: bank.account_number,
         account_holder: bank.account_holder,
-        note: `Tien se chuyen ve ngan hang sau khi admin duyet. Phi chuyen tien: ${serviceFee.toLocaleString('vi-VN')}d`,
+        note: isWeekend
+          ? `Da gui yeu cau payout. He thong se xu ly vao ngay lam viec tiep theo (tru Thu 7 va Chu nhat). Phi chuyen tien: ${serviceFee.toLocaleString('vi-VN')}d`
+          : `Da gui yeu cau payout. He thong se xu ly vao cac ngay trong tuan, tru Thu 7 va Chu nhat. Phi chuyen tien: ${serviceFee.toLocaleString('vi-VN')}d`,
       };
     } catch (error) {
       await client.query('ROLLBACK');
@@ -127,7 +127,20 @@ export class GeneralService {
   }
 
   async getAdminShipperCodReconciliations(status?: string) {
-    return await repo.getAdminShipperCodReconciliations(status);
+    const rows = await repo.getAdminShipperCodReconciliations(status);
+    const reconciliationIds = rows.map((item: any) => Number(item.id_reconciliation));
+    const orders = await repo.getShipperCodReconciliationOrders(reconciliationIds);
+    const ordersByReconciliation = orders.reduce((acc: Record<number, any[]>, item: any) => {
+      const id = Number(item.reconciliation_id);
+      acc[id] = acc[id] || [];
+      acc[id].push(item);
+      return acc;
+    }, {});
+
+    return rows.map((item: any) => ({
+      ...item,
+      orders: ordersByReconciliation[Number(item.id_reconciliation)] || [],
+    }));
   }
 
   async confirmShipperCodReconciliation(id_reconciliation: number, id_admin: number, admin_note?: string) {

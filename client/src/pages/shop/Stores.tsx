@@ -4,6 +4,54 @@ import apiClient from '../../api/client';
 import { isValidVietnamPhone, normalizeVietnamPhone, vietnamPhoneError } from '../../utils/phone';
 import './Stores.css';
 
+type SupportedDistrict = {
+  name: string;
+};
+
+type SupportedProvince = {
+  name: string;
+  districts: SupportedDistrict[];
+};
+
+type ProvinceApiItem = {
+  code: number;
+  name: string;
+};
+
+type DistrictApiItem = {
+  code: number;
+  name: string;
+};
+
+type WardApiItem = {
+  code: number;
+  name: string;
+};
+
+const normalizeLocationText = (value: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/[.\-_/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const normalizeProvinceName = (value: string) =>
+  normalizeLocationText(value).replace(/^(thanh pho|tp|tinh)\s*/, '');
+
+const normalizeDistrictName = (value: string) =>
+  normalizeLocationText(value)
+    .replace(/^(quan|q)\s*/, '')
+    .replace(/^(huyen|h)\s*/, '')
+    .replace(/^(thi xa|tx)\s*/, '')
+    .replace(/^(thi tran|tt)\s*/, '')
+    .replace(/^(thanh pho|tp)\s*/, '')
+    .trim();
+
+const isSameProvince = (a: string, b: string) => normalizeProvinceName(a) === normalizeProvinceName(b);
+const isSameDistrict = (a: string, b: string) => normalizeDistrictName(a) === normalizeDistrictName(b);
+
 const Stores = () => {
   const [stores, setStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -13,13 +61,14 @@ const Stores = () => {
 
   // Address Modal States
   const [showAddressModal, setShowAddressModal] = useState(false);
-  const [provinces, setProvinces] = useState<any[]>([]);
-  const [districts, setDistricts] = useState<any[]>([]);
-  const [wards, setWards] = useState<any[]>([]);
+  const [supportedProvinces, setSupportedProvinces] = useState<SupportedProvince[]>([]);
+  const [provinceCatalog, setProvinceCatalog] = useState<ProvinceApiItem[]>([]);
+  const [districts, setDistricts] = useState<DistrictApiItem[]>([]);
+  const [wards, setWards] = useState<WardApiItem[]>([]);
   
-  const [selectedProv, setSelectedProv] = useState<any>(null);
-  const [selectedDist, setSelectedDist] = useState<any>(null);
-  const [selectedWard, setSelectedWard] = useState<any>(null);
+  const [selectedProv, setSelectedProv] = useState<SupportedProvince | null>(null);
+  const [selectedDist, setSelectedDist] = useState<DistrictApiItem | null>(null);
+  const [selectedWard, setSelectedWard] = useState<WardApiItem | null>(null);
   const [streetNum, setStreetNum] = useState('');
 
   const fetchStores = async () => {
@@ -36,45 +85,72 @@ const Stores = () => {
     }
   };
 
+  const findProvinceApi = (provinceName: string) =>
+    provinceCatalog.find((item) => isSameProvince(item.name, provinceName)) || null;
+
+  const loadSupportedDistricts = async (province: SupportedProvince) => {
+    const provinceApi = findProvinceApi(province.name);
+    if (!provinceApi) {
+      setDistricts([]);
+      return [];
+    }
+
+    const res = await fetch(`https://provinces.open-api.vn/api/p/${provinceApi.code}?depth=2`);
+    const data = await res.json();
+    const filteredDistricts = (data.districts || []).filter((district: DistrictApiItem) =>
+      province.districts.some((item) => isSameDistrict(item.name, district.name))
+    );
+    setDistricts(filteredDistricts);
+    return filteredDistricts;
+  };
+
+  const loadWardsForDistrict = async (district: DistrictApiItem) => {
+    const res = await fetch(`https://provinces.open-api.vn/api/d/${district.code}?depth=2`);
+    const data = await res.json();
+    const nextWards = data.wards || [];
+    setWards(nextWards);
+    return nextWards;
+  };
+
   useEffect(() => {
     fetchStores();
+    apiClient.get('/shop/areas/supported')
+      .then((res: any) => {
+        if (res?.status === 'success') setSupportedProvinces(res.data || []);
+      })
+      .catch(console.error);
     fetch('https://provinces.open-api.vn/api/p/')
       .then(res => res.json())
-      .then(data => setProvinces(data))
+      .then(data => setProvinceCatalog(data))
       .catch(console.error);
   }, []);
 
   const handleProvChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const code = e.target.value;
-    const prov = provinces.find(p => p.code == code);
+    const prov = supportedProvinces.find((item) => item.name === e.target.value) || null;
     setSelectedProv(prov);
     setSelectedDist(null);
     setSelectedWard(null);
     setDistricts([]);
     setWards([]);
-    if (!code) return;
-    const res = await fetch(`https://provinces.open-api.vn/api/p/${code}?depth=2`);
-    const data = await res.json();
-    setDistricts(data.districts || []);
+    if (!prov) return;
+    await loadSupportedDistricts(prov);
   };
 
   const handleDistChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const code = e.target.value;
-    const dist = districts.find(d => d.code == code);
+    const dist = districts.find(d => String(d.code) === code) || null;
     setSelectedDist(dist);
     setSelectedWard(null);
     setWards([]);
-    if (!code) return;
-    const res = await fetch(`https://provinces.open-api.vn/api/d/${code}?depth=2`);
-    const data = await res.json();
-    setWards(data.wards || []);
+    if (!dist) return;
+    await loadWardsForDistrict(dist);
   };
 
   const openAddressModalWithData = async () => {
     setShowAddressModal(true);
     const addressStr = formData.address || '';
     if (!addressStr) {
-      setSelectedProv(null); setSelectedDist(null); setSelectedWard(null); setStreetNum('');
+      setSelectedProv(null); setSelectedDist(null); setSelectedWard(null); setDistricts([]); setWards([]); setStreetNum('');
       return;
     }
     const parts = addressStr.split(', ');
@@ -84,21 +160,17 @@ const Stores = () => {
       const wName = parts[parts.length - 3];
       const sNum = parts.slice(0, parts.length - 3).join(', ');
       
-      const prov = provinces.find(p => p.name === pName);
+      const prov = supportedProvinces.find((p) => isSameProvince(p.name, pName)) || null;
       if (prov) {
         setSelectedProv(prov);
-        const repD = await fetch(`https://provinces.open-api.vn/api/p/${prov.code}?depth=2`);
-        const datD = await repD.json();
-        setDistricts(datD.districts || []);
+        const nextDistricts = await loadSupportedDistricts(prov);
         
-        const dist = (datD.districts || []).find((d: any) => d.name === dName);
+        const dist = nextDistricts.find((d: DistrictApiItem) => isSameDistrict(d.name, dName)) || null;
         if (dist) {
           setSelectedDist(dist);
-          const repW = await fetch(`https://provinces.open-api.vn/api/d/${dist.code}?depth=2`);
-          const datW = await repW.json();
-          setWards(datW.wards || []);
+          const nextWards = await loadWardsForDistrict(dist);
           
-          const ward = (datW.wards || []).find((w: any) => w.name === wName);
+          const ward = nextWards.find((w: WardApiItem) => w.name === wName) || null;
           if (ward) {
             setSelectedWard(ward);
             setStreetNum(sNum);
@@ -262,19 +334,22 @@ const Stores = () => {
               <button type="button" onClick={() => setShowAddressModal(false)} style={{background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer'}}>&times;</button>
             </div>
             <div style={{display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '16px'}}>
-               <select className="form-control" value={selectedProv?.code || ''} onChange={handleProvChange}>
+               <select className="form-control" value={selectedProv?.name || ''} onChange={handleProvChange}>
                  <option value="">Chọn Tỉnh/Thành phố</option>
-                 {provinces.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
+                 {supportedProvinces.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
                </select>
                <select className="form-control" value={selectedDist?.code || ''} onChange={handleDistChange} disabled={!selectedProv}>
                  <option value="">Chọn Quận/Huyện</option>
                  {districts.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
                </select>
-               <select className="form-control" value={selectedWard?.code || ''} onChange={e => setSelectedWard(wards.find(w=>w.code==e.target.value))} disabled={!selectedDist}>
+               <select className="form-control" value={selectedWard?.code || ''} onChange={e => setSelectedWard(wards.find(w => String(w.code) === e.target.value) || null)} disabled={!selectedDist}>
                  <option value="">Chọn Phường/Xã</option>
                  {wards.map(w => <option key={w.code} value={w.code}>{w.name}</option>)}
                </select>
                <input type="text" className="form-control" value={streetNum} onChange={e => setStreetNum(e.target.value)} placeholder="Nhập số nhà, tên đường..." disabled={!selectedWard} />
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--slate-500)', marginBottom: '12px' }}>
+              Chỉ hiện các tỉnh/thành và quận/huyện đã được cấu hình giao hàng trong hệ thống.
             </div>
             <div className="modal-actions">
               <button type="button" className="btn-outline" onClick={() => setShowAddressModal(false)}>Hủy</button>

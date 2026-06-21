@@ -34,6 +34,58 @@ type OrderFormData = {
   note: string;
 };
 
+type SupportedDistrict = {
+  name: string;
+  id_area: number;
+  id_spoke: number;
+  spoke_name: string;
+  area_type: string | null;
+};
+
+type SupportedProvince = {
+  name: string;
+  districts: SupportedDistrict[];
+};
+
+type ProvinceApiItem = {
+  code: number;
+  name: string;
+};
+
+type DistrictApiItem = {
+  code: number;
+  name: string;
+};
+
+type WardApiItem = {
+  code: number;
+  name: string;
+};
+
+const normalizeLocationText = (value: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/[.\-_/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const normalizeProvinceName = (value: string) =>
+  normalizeLocationText(value).replace(/^(thanh pho|tp|tinh)\s*/, '');
+
+const normalizeDistrictName = (value: string) =>
+  normalizeLocationText(value)
+    .replace(/^(quan|q)\s*/, '')
+    .replace(/^(huyen|h)\s*/, '')
+    .replace(/^(thi xa|tx)\s*/, '')
+    .replace(/^(thi tran|tt)\s*/, '')
+    .replace(/^(thanh pho|tp)\s*/, '')
+    .trim();
+
+const isSameProvince = (a: string, b: string) => normalizeProvinceName(a) === normalizeProvinceName(b);
+const isSameDistrict = (a: string, b: string) => normalizeDistrictName(a) === normalizeDistrictName(b);
+
 const CreateOrder = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -43,18 +95,19 @@ const CreateOrder = () => {
 
   const [stores, setStores] = useState<any[]>([]);
   const [spokes, setSpokes] = useState<any[]>([]);
-  const [provinces, setProvinces] = useState<any[]>([]);
-  const [districts, setDistricts] = useState<any[]>([]);
-  const [wards, setWards] = useState<any[]>([]);
+  const [supportedProvinces, setSupportedProvinces] = useState<SupportedProvince[]>([]);
+  const [provinceCatalog, setProvinceCatalog] = useState<ProvinceApiItem[]>([]);
+  const [districts, setDistricts] = useState<DistrictApiItem[]>([]);
+  const [wards, setWards] = useState<WardApiItem[]>([]);
   const [serviceTypes, setServiceTypes] = useState<any[]>([]);
 
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [addressModalType, setAddressModalType] = useState<'RECEIVER' | 'SENDER' | null>(null);
   const [showStoreSelector, setShowStoreSelector] = useState(false);
 
-  const [selectedProv, setSelectedProv] = useState<any>(null);
-  const [selectedDist, setSelectedDist] = useState<any>(null);
-  const [selectedWard, setSelectedWard] = useState<any>(null);
+  const [selectedProv, setSelectedProv] = useState<SupportedProvince | null>(null);
+  const [selectedDist, setSelectedDist] = useState<DistrictApiItem | null>(null);
+  const [selectedWard, setSelectedWard] = useState<WardApiItem | null>(null);
   const [streetNum, setStreetNum] = useState('');
 
   const [pickupType, setPickupType] = useState(savedDraft?.pickupType || 'TAN_NOI');
@@ -94,6 +147,34 @@ const CreateOrder = () => {
 
   const getActiveStore = () => stores.find((s) => String(s.id_store) === String(formData.id_store));
 
+  const findProvinceApi = (provinceName: string) =>
+    provinceCatalog.find((item) => isSameProvince(item.name, provinceName)) || null;
+
+  const loadSupportedDistricts = async (province: SupportedProvince) => {
+    const provinceApi = findProvinceApi(province.name);
+    if (!provinceApi) {
+      setDistricts([]);
+      return [];
+    }
+
+    const res = await fetch(`https://provinces.open-api.vn/api/p/${provinceApi.code}?depth=2`);
+    const data = await res.json();
+    const allowed = province.districts;
+    const filteredDistricts = (data.districts || []).filter((district: DistrictApiItem) =>
+      allowed.some((item) => isSameDistrict(item.name, district.name))
+    );
+    setDistricts(filteredDistricts);
+    return filteredDistricts;
+  };
+
+  const loadWardsForDistrict = async (district: DistrictApiItem) => {
+    const res = await fetch(`https://provinces.open-api.vn/api/d/${district.code}?depth=2`);
+    const data = await res.json();
+    const nextWards = data.wards || [];
+    setWards(nextWards);
+    return nextWards;
+  };
+
   useEffect(() => {
     if (skipFirstTypeSync.current) {
       skipFirstTypeSync.current = false;
@@ -130,6 +211,9 @@ const CreateOrder = () => {
 
       const svcRes = (await apiClient.get('/shop/orders/service-types').catch(() => null)) as any;
       if (svcRes) setServiceTypes(svcRes.data || []);
+
+      const areaRes = (await apiClient.get('/shop/areas/supported').catch(() => null)) as any;
+      if (areaRes?.status === 'success') setSupportedProvinces(areaRes.data || []);
     };
 
     load().catch(console.error);
@@ -137,7 +221,7 @@ const CreateOrder = () => {
     apiClient.get('/promotions').then((res: any) => {
       if (res?.status === 'success') setPromos(res.data || []);
     }).catch(() => {});
-    fetch('https://provinces.open-api.vn/api/p/').then((res) => res.json()).then(setProvinces).catch(console.error);
+    fetch('https://provinces.open-api.vn/api/p/').then((res) => res.json()).then(setProvinceCatalog).catch(console.error);
     const onStoreChanged = () => {
       const id = localStorage.getItem('default_store');
       if (id) setFormData((prev) => ({ ...prev, id_store: id }));
@@ -147,16 +231,14 @@ const CreateOrder = () => {
   }, []);
 
   const handleProvChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const prov = provinces.find((p) => String(p.code) === e.target.value) || null;
+    const prov = supportedProvinces.find((p) => p.name === e.target.value) || null;
     setSelectedProv(prov);
     setSelectedDist(null);
     setSelectedWard(null);
     setDistricts([]);
     setWards([]);
     if (!prov) return;
-    const res = await fetch(`https://provinces.open-api.vn/api/p/${prov.code}?depth=2`);
-    const data = await res.json();
-    setDistricts(data.districts || []);
+    await loadSupportedDistricts(prov);
   };
 
   const handleDistChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -165,9 +247,7 @@ const CreateOrder = () => {
     setSelectedWard(null);
     setWards([]);
     if (!dist) return;
-    const res = await fetch(`https://provinces.open-api.vn/api/d/${dist.code}?depth=2`);
-    const data = await res.json();
-    setWards(data.wards || []);
+    await loadWardsForDistrict(dist);
   };
 
   const openAddressModal = async (type: 'RECEIVER' | 'SENDER') => {
@@ -532,7 +612,7 @@ const CreateOrder = () => {
 
       {showStoreSelector && <div className="modal-overlay" onClick={() => setShowStoreSelector(false)}><div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}><div className="modal-header"><h2>Chon kho lay hang</h2><button type="button" className="close-btn" onClick={() => setShowStoreSelector(false)}>&times;</button></div><div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '16px' }}>{stores.map((s) => <div key={s.id_store} onClick={() => { setFormData((p) => ({ ...p, id_store: String(s.id_store) })); localStorage.setItem('default_store', String(s.id_store)); window.dispatchEvent(new Event('default_store_changed')); setShowStoreSelector(false); }} style={{ padding: '12px', border: String(s.id_store) === String(formData.id_store) ? '2px solid var(--primary-color)' : '1px solid #ddd', borderRadius: '8px', cursor: 'pointer' }}><div style={{ fontWeight: 600, color: '#000' }}>{s.store_name}</div><div style={{ fontSize: '13px', color: '#555', marginTop: '4px' }}>{s.phone}</div><div style={{ fontSize: '13px', color: '#555' }}>{s.address}</div></div>)}</div></div></div>}
 
-      {showAddressModal && <div className="modal-overlay" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}><div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}><div className="modal-header"><h2>{addressModalType === 'SENDER' ? 'Sua dia chi kho lay hang' : 'Nhap dia chi nguoi nhan'}</h2><button type="button" className="close-btn" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}>&times;</button></div><div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '16px' }}><select className="ghn-input" value={selectedProv?.code || ''} onChange={handleProvChange}><option value="">Chon Tinh/Thanh pho</option>{provinces.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}</select><select className="ghn-input" value={selectedDist?.code || ''} onChange={handleDistChange} disabled={!selectedProv}><option value="">Chon Quan/Huyen</option>{districts.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}</select><select className="ghn-input" value={selectedWard?.code || ''} onChange={(e) => setSelectedWard(wards.find((w) => String(w.code) === e.target.value))} disabled={!selectedDist}><option value="">Chon Phuong/Xa</option>{wards.map((w) => <option key={w.code} value={w.code}>{w.name}</option>)}</select><input type="text" className="ghn-input" value={streetNum} onChange={(e) => setStreetNum(e.target.value)} placeholder="Nhap so nha, ten duong..." disabled={!selectedWard} /></div><div className="modal-footer"><button type="button" className="tag-btn" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}>Huy</button><button type="button" className="btn-create" onClick={saveAddress}>Xac nhan</button></div></div></div>}
+      {showAddressModal && <div className="modal-overlay" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}><div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}><div className="modal-header"><h2>{addressModalType === 'SENDER' ? 'Sua dia chi kho lay hang' : 'Nhap dia chi nguoi nhan'}</h2><button type="button" className="close-btn" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}>&times;</button></div><div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '16px' }}><select className="ghn-input" value={selectedProv?.name || ''} onChange={handleProvChange}><option value="">Chon Tinh/Thanh pho</option>{supportedProvinces.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}</select><select className="ghn-input" value={selectedDist?.code || ''} onChange={handleDistChange} disabled={!selectedProv}><option value="">Chon Quan/Huyen</option>{districts.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}</select><select className="ghn-input" value={selectedWard?.code || ''} onChange={(e) => setSelectedWard(wards.find((w) => String(w.code) === e.target.value) || null)} disabled={!selectedDist}><option value="">Chon Phuong/Xa</option>{wards.map((w) => <option key={w.code} value={w.code}>{w.name}</option>)}</select><input type="text" className="ghn-input" value={streetNum} onChange={(e) => setStreetNum(e.target.value)} placeholder="Nhap so nha, ten duong..." disabled={!selectedWard} /></div><div style={{ fontSize: '12px', color: 'var(--slate-500)', marginBottom: '12px' }}>Chi hien cac tinh/thanh va quan/huyen da duoc cau hinh giao hang trong he thong.</div><div className="modal-footer"><button type="button" className="tag-btn" onClick={() => { setShowAddressModal(false); setAddressModalType(null); }}>Huy</button><button type="button" className="btn-create" onClick={saveAddress}>Xac nhan</button></div></div></div>}
 
       {/* Promo Modal */}
       {showPromoModal && (

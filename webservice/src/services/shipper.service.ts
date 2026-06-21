@@ -1,5 +1,5 @@
 import { ShipperRepository } from '../repositories/shipper.repository';
-import { DELIVERY_ATTEMPT_RESULT, ORDER_STATUS, orderStatusEquals, orderStatusIn } from '../utils/orderStatus';
+import { ORDER_STATUS, orderStatusEquals, orderStatusIn } from '../utils/orderStatus';
 
 const shipperRepo = new ShipperRepository();
 
@@ -89,8 +89,9 @@ export class ShipperService {
         continue;
       }
 
-      const assignedShipperId = await shipperRepo.resolveAssignedShipperByAddress(
+      const canHandleOrder = await shipperRepo.canShipperHandleAddress(
         assignment.id_spoke,
+        id_user,
         order.pickup_address || ''
       );
 
@@ -98,7 +99,7 @@ export class ShipperService {
         continue;
       }
 
-      if (!assignedShipperId || Number(assignedShipperId) === Number(id_user)) {
+      if (canHandleOrder) {
         orders.push({ ...order, is_p2p_broadcast: false });
       }
     }
@@ -112,7 +113,17 @@ export class ShipperService {
 
   async getDeliveryList(id_user: number) {
     const assignment = await this.getSpokeAssignment(id_user);
-    const orders = await shipperRepo.getOrdersToDeliver(assignment.id_spoke, id_user);
+    const orders = await shipperRepo.getOrdersToDeliverV2(assignment.id_spoke, id_user);
+    return {
+      assigned_spoke: assignment.spoke_name,
+      total: orders.length,
+      orders,
+    };
+  }
+
+  async getToWarehouseList(id_user: number) {
+    const assignment = await this.getSpokeAssignment(id_user);
+    const orders = await shipperRepo.getOrdersToWarehouse(id_user);
     return {
       assigned_spoke: assignment.spoke_name,
       total: orders.length,
@@ -169,12 +180,13 @@ export class ShipperService {
       }
 
       if (order.id_service_type !== 3) {
-        const assignedShipperId = await shipperRepo.resolveAssignedShipperByAddress(
+        const canHandleOrder = await shipperRepo.canShipperHandleAddress(
           assignment.id_spoke,
+          id_user,
           order.store_address || ''
         );
-        if (assignedShipperId && Number(assignedShipperId) !== Number(id_user)) {
-          throw new Error('Don nay da duoc he thong phan cho shipper khac trong khu vuc.');
+        if (!canHandleOrder) {
+          throw new Error('Don nay khong thuoc phuong/khu vuc duoc giao cho ban.');
         }
       }
 
@@ -267,9 +279,6 @@ export class ShipperService {
       if (!originArea || Number(originArea.id_spoke) !== Number(assignment.id_spoke)) {
         throw new Error('Don nay khong thuoc khu vuc lay hang cua ban.');
       }
-      if (order.current_shipper_id && Number(order.current_shipper_id) !== Number(id_user)) {
-        throw new Error('Don nay da duoc shipper khac nhan.');
-      }
 
       const isSameDay = order.id_service_type === 3;
       if (isSameDay) {
@@ -277,12 +286,13 @@ export class ShipperService {
           throw new Error('Don hoa toc nay chua duoc ban nhan, hoac da bi shipper khac nhan.');
         }
       } else {
-        const assignedShipperId = await shipperRepo.resolveAssignedShipperByAddress(
+        const canHandleOrder = await shipperRepo.canShipperHandleAddress(
           assignment.id_spoke,
+          id_user,
           order.store_address || ''
         );
-        if (assignedShipperId && Number(assignedShipperId) !== Number(id_user)) {
-          throw new Error('Don nay da duoc he thong phan cho shipper khac trong khu vuc.');
+        if (!canHandleOrder) {
+          throw new Error('Don nay khong thuoc phuong/khu vuc duoc giao cho ban.');
         }
       }
 
@@ -295,7 +305,7 @@ export class ShipperService {
 
       return {
         tracking_code,
-        status: ORDER_STATUS.PICKED_UP,
+        status: 'ĐÃ LẤY HÀNG',
         sender_cash_collected: pickupCashItems.reduce((sum: number, item: any) => sum + Number(item.collected_amount || 0), 0),
         message: pickupCashItems.length > 0
           ? `Xac nhan lay hang thanh cong. Shipper da thu ${pickupCashItems.reduce((sum: number, item: any) => sum + Number(item.collected_amount || 0), 0).toLocaleString('vi-VN')}d phi ship tien mat tu shop.`
@@ -321,9 +331,9 @@ export class ShipperService {
 
       const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
       if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
-
-      if (!orderStatusEquals(order.status, ORDER_STATUS.WAITING_PICKUP)) {
-        throw new Error(`Chi co the bao that bai khi don dang o trang thai "CHá»œ Láº¤Y HÃ€NG". Hien tai: "${order.status}".`);
+      
+      if (order.status !== 'CHỜ LẤY HÀNG') {
+        throw new Error(`Chi co the bao that bai khi don dang o trang thai "CHỜ LẤY HÀNG". Hien tai: "${order.status}".`);
       }
 
       const originArea = await shipperRepo.resolveSpokeByAddress(order.store_address || '');
@@ -331,7 +341,7 @@ export class ShipperService {
         throw new Error('Don nay khong thuoc khu vuc lay hang cua ban.');
       }
 
-      await shipperRepo.updateOrderStatus(order.id_order, ORDER_STATUS.PICKUP_FAILED, client);
+      await shipperRepo.updateOrderStatus(order.id_order, 'LẤY HÀNG THẤT BẠI', client);
       await shipperRepo.updateCurrentShipper(order.id_order, null, client);
       await shipperRepo.insertOrderLog(
         order.id_order,
@@ -346,7 +356,7 @@ export class ShipperService {
 
       return {
         tracking_code,
-        status: ORDER_STATUS.PICKUP_FAILED,
+        status: 'LẤY HÀNG THẤT BẠI',
         message: `Ghi nhan lay hang that bai voi ly do: ${reason_fail}`,
       };
     } catch (error) {
@@ -367,14 +377,13 @@ export class ShipperService {
 
       const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
       if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
-      if (!orderStatusIn(order.status, [ORDER_STATUS.PICKED_UP, ORDER_STATUS.DELIVERY_FAILED])) {
+      if (!['ĐÃ LẤY HÀNG', 'GIAO THẤT BẠI'].includes(order.status)) {
         throw new Error(`Don dang o trang thai "${order.status}", khong the bat dau giao.`);
       }
-      const isSameDay = order.id_service_type === 3;
-      if (orderStatusEquals(order.status, ORDER_STATUS.PICKED_UP) && !isSameDay && order.latest_action !== 'XUAT KHO -> GIAO CUOI') {
+      if (order.status === 'ĐÃ LẤY HÀNG' && order.latest_action !== 'XUAT KHO -> GIAO CUOI') {
         throw new Error('Don chua duoc ban giao cho shipper giao cuoi chang.');
       }
-      if (!isSameDay && Number(order.dest_spoke || 0) !== Number(assignment.id_spoke)) {
+      if (Number(order.dest_spoke || 0) !== Number(assignment.id_spoke)) {
         throw new Error('Don nay khong thuoc khu vuc giao hang cua ban.');
       }
       if (order.current_shipper_id && Number(order.current_shipper_id) !== Number(id_user)) {
@@ -382,14 +391,14 @@ export class ShipperService {
       }
 
       await shipperRepo.updateCurrentShipper(order.id_order, id_user, client);
-      await shipperRepo.updateOrderStatus(order.id_order, ORDER_STATUS.DELIVERING, client);
+      await shipperRepo.updateOrderStatus(order.id_order, 'ĐANG GIAO', client);
       await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'BAT DAU GIAO HANG', null, client);
 
       await client.query('COMMIT');
 
       return {
         tracking_code,
-        status: ORDER_STATUS.DELIVERING,
+        status: 'ĐANG GIAO',
         message: 'Don dang tren duong giao.',
       };
     } catch (error) {
@@ -410,7 +419,7 @@ export class ShipperService {
 
       const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
       if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
-      if (!orderStatusEquals(order.status, ORDER_STATUS.DELIVERING)) {
+      if (order.status !== 'ĐANG GIAO') {
         throw new Error(`Khong the xac nhan giao thanh cong. Don dang o trang thai "${order.status}".`);
       }
       if (Number(order.current_shipper_id || 0) !== Number(id_user)) {
@@ -432,13 +441,13 @@ export class ShipperService {
         order.id_order,
         attemptCount + 1,
         id_user,
-        DELIVERY_ATTEMPT_RESULT.SUCCESS,
+        'THÀNH CÔNG',
         null,
         null,
         evidence_url || null,
         client
       );
-      await shipperRepo.updateOrderStatus(order.id_order, ORDER_STATUS.DELIVERED, client);
+      await shipperRepo.updateOrderStatus(order.id_order, 'GIAO THÀNH CÔNG', client);
       await shipperRepo.updateCurrentShipper(order.id_order, id_user, client);
       await shipperRepo.insertOrderLog(
         order.id_order,
@@ -449,9 +458,6 @@ export class ShipperService {
         client
       );
 
-      // Cộng 1 điểm KPI (Thành công)
-      await shipperRepo.updateShipperPriority(id_user, 1, client);
-
       await client.query('COMMIT');
 
       const parts = [];
@@ -461,7 +467,7 @@ export class ShipperService {
 
       return {
         tracking_code,
-        status: ORDER_STATUS.DELIVERED,
+        status: 'GIAO THÀNH CÔNG',
         collected_cod: deliveryCodAmount || codAmount,
         collected_receiver_fee: receiverFeeAmount,
         total_cash_collected: totalCashCollected,
@@ -488,8 +494,8 @@ export class ShipperService {
 
       const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
       if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
-      if (!orderStatusEquals(order.status, ORDER_STATUS.DELIVERING)) {
-        throw new Error(`Chi co the bao that bai khi don dang o trang thai "ÄANG GIAO". Hien tai: "${order.status}".`);
+      if (order.status !== 'ĐANG GIAO') {
+        throw new Error(`Chi co the bao that bai khi don dang o trang thai "ĐANG GIAO". Hien tai: "${order.status}".`);
       }
       if (Number(order.current_shipper_id || 0) !== Number(id_user)) {
         throw new Error('Don nay khong nam trong danh sach dang giao cua ban.');
@@ -505,7 +511,7 @@ export class ShipperService {
         order.id_order,
         newAttemptNo,
         id_user,
-        DELIVERY_ATTEMPT_RESULT.FAILED,
+        'THẤT BẠI',
         reason_fail,
         normalizedReasonCode,
         evidence_url || null,
@@ -533,10 +539,8 @@ export class ShipperService {
       }
 
       if (!mustReturn) {
-        await shipperRepo.updateOrderStatus(order.id_order, ORDER_STATUS.DELIVERY_FAILED, client);
-        if (order.id_service_type !== 3) {
-          await shipperRepo.updateCurrentShipper(order.id_order, null, client);
-        }
+        await shipperRepo.updateOrderStatus(order.id_order, 'GIAO THẤT BẠI', client);
+        await shipperRepo.updateCurrentShipper(order.id_order, null, client);
       }
       await shipperRepo.insertOrderLog(
         order.id_order,
@@ -547,14 +551,11 @@ export class ShipperService {
         client
       );
 
-      // Trừ 2 điểm KPI (Thất bại)
-      await shipperRepo.updateShipperPriority(id_user, -2, client);
-
       await client.query('COMMIT');
 
       return {
         tracking_code,
-        status: mustReturn ? ORDER_STATUS.RETURNED : ORDER_STATUS.DELIVERY_FAILED,
+        status: mustReturn ? 'HOÀN HÀNG' : 'GIAO THẤT BẠI',
         attempt_no: newAttemptNo,
         reason_code: normalizedReasonCode,
         redelivery_fee_charged: redeliveryFeeCharged,
@@ -576,11 +577,22 @@ export class ShipperService {
   }
 
   async getCodSummary(id_user: number) {
-    const orders = await shipperRepo.getPendingCashCollectionsByUser(id_user);
+    const [orders, reconciliations] = await Promise.all([
+      shipperRepo.getPendingCashCollectionsByUser(id_user),
+      shipperRepo.getRecentCodReconciliations(id_user),
+    ]);
+    const reconciliationIds = reconciliations.map((item: any) => Number(item.id_reconciliation));
+    const reconciliationOrders = await shipperRepo.getReconciliationOrders(reconciliationIds);
+    const reconciliationOrdersById = reconciliationOrders.reduce((acc: Record<number, any[]>, item: any) => {
+      const id = Number(item.reconciliation_id);
+      acc[id] = acc[id] || [];
+      acc[id].push(item);
+      return acc;
+    }, {});
+
     const totalCod = orders.reduce((sum: number, order: any) => sum + Number(order.cod_amount || 0), 0);
     const totalReceiverFee = orders.reduce((sum: number, order: any) => sum + Number(order.receiver_fee_amount || 0), 0);
     const totalCashHeld = orders.reduce((sum: number, order: any) => sum + Number(order.cash_to_remit || 0), 0);
-    const reconciliations = await shipperRepo.getRecentCodReconciliations(id_user);
 
     return {
       order_count: orders.length,
@@ -588,7 +600,10 @@ export class ShipperService {
       total_receiver_fee: totalReceiverFee,
       total_cash_held: totalCashHeld,
       orders,
-      recent_reconciliations: reconciliations,
+      recent_reconciliations: reconciliations.map((item: any) => ({
+        ...item,
+        orders: reconciliationOrdersById[Number(item.id_reconciliation)] || [],
+      })),
     };
   }
 

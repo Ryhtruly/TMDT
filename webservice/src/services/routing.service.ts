@@ -104,6 +104,7 @@ export class RoutingService {
       }
 
       await client.query('COMMIT');
+      const persistedNodes = await routingRepo.getRouteNodes(id_route);
 
       return {
         id_route,
@@ -111,7 +112,7 @@ export class RoutingService {
         origin: origin?.spoke_name || 'N/A',
         destination: dest.spoke_name,
         total_nodes: nodes.length,
-        nodes: nodes.map(n => ({ location_name: n.name, stop_order: n.stop_order, is_intermediate: n.is_intermediate })),
+        nodes: persistedNodes,
         is_cached: false
       };
     } catch (e) {

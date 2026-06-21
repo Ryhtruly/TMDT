@@ -3,9 +3,10 @@ import { verifyToken, checkRoles } from '../middlewares/auth.middleware';
 import {
   getPickupList,
   getDeliveryList,
+  getToWarehouseList,
   getDashboardSummary,
-  acceptP2pOrder,
   acceptPickupOrder,
+  acceptP2pOrder,
   confirmPickup,
   reportFailedPickup,
   startDelivery,
@@ -23,10 +24,11 @@ router.use(verifyToken);
 router.use(checkRoles(['SHIPPER']));
 
 router.get('/pickup-list', getPickupList);
+router.get('/to-warehouse-list', getToWarehouseList);
 router.get('/delivery-list', getDeliveryList);
 router.get('/summary', getDashboardSummary);
-router.post('/p2p/accept', acceptP2pOrder);
 router.post('/pickup/accept', acceptPickupOrder);
+router.post('/p2p/accept', acceptP2pOrder);
 router.post('/scan/pickup', confirmPickup);
 router.post('/scan/pickup-failed', reportFailedPickup);
 router.post('/scan/start-delivery', startDelivery);

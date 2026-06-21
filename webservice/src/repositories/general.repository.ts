@@ -174,6 +174,34 @@ export class GeneralRepository {
     `, params)).rows;
   }
 
+  async getShipperCodReconciliationOrders(reconciliationIds: number[]) {
+    if (reconciliationIds.length === 0) return [];
+    return (
+      await pool.query(
+        `
+        SELECT
+          occ.reconciliation_id,
+          o.id_order,
+          o.tracking_code,
+          o.receiver_name,
+          o.receiver_phone,
+          o.receiver_address,
+          COALESCE(SUM(occ.collected_amount) FILTER (WHERE occ.collection_type = 'COD'), 0) as cod_amount,
+          COALESCE(SUM(occ.collected_amount) FILTER (WHERE occ.collection_type IN ('SHIPPING_FEE', 'INSURANCE_FEE')), 0) as receiver_fee_amount,
+          COALESCE(SUM(occ.collected_amount), 0) as cash_to_remit,
+          MIN(occ.collected_at) as first_collected_at,
+          MAX(occ.collected_at) as last_collected_at
+        FROM order_cash_collections occ
+        JOIN orders o ON o.id_order = occ.id_order
+        WHERE occ.reconciliation_id = ANY($1::int[])
+        GROUP BY occ.reconciliation_id, o.id_order
+        ORDER BY occ.reconciliation_id DESC, MAX(occ.collected_at) DESC, o.id_order DESC
+        `,
+        [reconciliationIds]
+      )
+    ).rows;
+  }
+
   async findShipperCodReconciliationForUpdate(id_reconciliation: number, client: any) {
     const result = await client.query(
       'SELECT * FROM shipper_cod_reconciliations WHERE id_reconciliation = $1 FOR UPDATE',

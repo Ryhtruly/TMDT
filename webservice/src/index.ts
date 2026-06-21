@@ -1,6 +1,6 @@
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import './config/env';
 import { pool } from './config/db';
 import authRoutes from './routes/auth.routes';
 import adminRoutes from './routes/admin.routes';
@@ -11,8 +11,6 @@ import stockkeeperRoutes from './routes/stockkeeper.routes';
 import generalRoutes from './routes/general.routes';
 import { ensureSchema } from './db/ensureSchema';
 import { CronService } from './services/cron.service';
-
-dotenv.config();
 
 const app: Express = express();
 const port = process.env.PORT || 3000;
@@ -54,8 +52,8 @@ const bootstrap = async () => {
   try {
     await ensureSchema();
     app.listen(port, () => {
-      console.log(`[Server]: listening on http://localhost:${port}`);
-      console.log(`[Test API]: http://localhost:${port}/api/test-db`);
+      console.log(`[Server][PID ${process.pid}]: listening on http://localhost:${port}`);
+      console.log(`[Test API][PID ${process.pid}]: http://localhost:${port}/api/test-db`);
       new CronService().startJobs();
     });
   } catch (error) {

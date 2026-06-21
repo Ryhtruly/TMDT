@@ -15,7 +15,7 @@ const validatePassword = (password: string, phone: string, shop_name: string): s
   if (password.toLowerCase().includes(shop_name.toLowerCase()) || shop_name.toLowerCase().includes(password.toLowerCase())) {
     return 'Mật khẩu không được chứa tên tài khoản/tên cửa hàng của bạn.';
   }
-  return null; // Hợp lệ
+  return null;
 };
 
 const validateEmail = (email: string): boolean => {
@@ -24,32 +24,27 @@ const validateEmail = (email: string): boolean => {
 };
 
 // Simple in-memory OTP cache for demo purposes
-const otpCache: Record<string, { code: string, expiry: number }> = {};
+const otpCache: Record<string, { code: string; expiry: number }> = {};
 
 export class ShopService {
-  // =============================================
-  // 1. GỬI & XÁC THỰC OTP
-  // =============================================
+  // 1. GUI & XAC THUC OTP
   async sendOtp(phone: string, isForgot = false) {
     if (!phone) throw new Error('Số điện thoại không hợp lệ.');
-    
+
     const existing = await shopRepo.findUserByPhone(phone);
     if (!isForgot && existing) throw new Error('Số điện thoại này đã được đăng ký. Vui lòng dùng SĐT khác.');
     if (isForgot && !existing) throw new Error('Không tìm thấy tài khoản với số điện thoại này.');
 
-    // Tạo mã OTP 6 số ngẫu nhiên
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Lưu vào cache, hết hạn sau 5 phút
     otpCache[phone] = { code, expiry: Date.now() + 5 * 60 * 1000 };
 
-    // Bắn ra Terminal của server
-    console.log(`\n================================`);
-    console.log(`🚀 [SMS MOCK] HỆ THỐNG GỬI MÃ OTP ${isForgot ? '(QUÊN MẬT KHẨU)' : ''}`);
-    console.log(`📱 Số điện thoại nhận: ${phone}`);
-    console.log(`🔑 Mã OTP của bạn là: \x1b[32m${code}\x1b[0m`);
-    console.log(`⏳ Hiệu lực trong 5 phút.`);
-    console.log(`================================\n`);
+    // Dùng ASCII ở console để tránh lệch codepage terminal Windows.
+    console.log('\n================================');
+    console.log(`[SMS MOCK][PID ${process.pid}] OTP SYSTEM ${isForgot ? '(QUEN MAT KHAU)' : ''}`);
+    console.log(`Phone nhan OTP: ${phone}`);
+    console.log(`Ma OTP cua ban la: \x1b[32m${code}\x1b[0m`);
+    console.log('Hieu luc trong 5 phut.');
+    console.log('================================\n');
 
     return true;
   }
@@ -64,23 +59,21 @@ export class ShopService {
     if (record.code !== otp) {
       throw new Error('Mã OTP không chính xác.');
     }
-    
-    // Xác thực thành công
+
     return true;
   }
 
   async resetPassword(data: any) {
     const { phone, otp, password, confirm_password } = data;
-    
+
     if (!phone || !otp || !password || !confirm_password) {
-      throw new Error('Vui lòng điền đầy đủ thông tin Mật khẩu mới.');
+      throw new Error('Vui lòng điền đầy đủ thông tin mật khẩu mới.');
     }
 
     if (password !== confirm_password) {
       throw new Error('Mật khẩu nhập lại không khớp.');
     }
 
-    // Xác thực lại OTP logic
     await this.verifyOtp(phone, otp);
 
     const existing = await shopRepo.findUserByPhone(phone);
@@ -92,20 +85,16 @@ export class ShopService {
     const passwordError = validatePassword(password, phone, shopName);
     if (passwordError) throw new Error(passwordError);
 
-    // Update password
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
     await shopRepo.updatePassword(existing.id_user, hashedPassword);
 
-    // Hủy OTP để không xài lại
     delete otpCache[phone];
 
     return true;
   }
 
-  // =============================================
-  // 2. ĐĂNG KÝ TÀI KHOẢN SHOP (Register)
-  // =============================================
+  // 2. DANG KY TAI KHOAN SHOP (Register)
   async registerShop(data: any) {
     const { phone, email, password, confirm_password, shop_name } = data;
 
@@ -121,13 +110,10 @@ export class ShopService {
       throw new Error('Định dạng email không hợp lệ.');
     }
 
-    // Validate mật khẩu chuẩn bảo mật theo Docx
-    // Validate mật khẩu chuẩn bảo mật theo Docx
     const normalizedPhone = assertValidVietnamPhone(phone, 'SĐT đăng ký');
     const passwordError = validatePassword(password, normalizedPhone, shop_name);
     if (passwordError) throw new Error(passwordError);
 
-    // Kiểm tra trùng SĐT
     const existing = await shopRepo.findUserByPhone(normalizedPhone);
     if (existing) throw new Error('Số điện thoại này đã được đăng ký. Vui lòng dùng SĐT khác.');
 
@@ -141,16 +127,9 @@ export class ShopService {
       const salt = await bcrypt.genSalt(12);
       const hashedPassword = await bcrypt.hash(password, salt);
 
-      // Tạo User
       const id_user = await shopRepo.createUser(normalizedPhone, email, hashedPassword, client);
-
-      // Gán Role SHOP
       await shopRepo.assignRole(id_user, shopRole.id_role, client);
-
-      // Tạo Shop profile
       const id_shop = await shopRepo.createShop(id_user, shop_name, client);
-
-      // Tạo Ví tiền mặc định (balance = 0)
       await shopRepo.createWallet(id_user, client);
 
       await client.query('COMMIT');
@@ -163,18 +142,14 @@ export class ShopService {
     }
   }
 
-  // =============================================
-  // 2. XEM THÔNG TIN & VÍ TIỀN CỦA SHOP
-  // =============================================
+  // 3. XEM THONG TIN & VI TIEN CUA SHOP
   async getProfile(id_user: number) {
     const shop = await shopRepo.findShopByUserId(id_user);
     if (!shop) throw new Error('Không tìm thấy thông tin Shop của tài khoản này.');
     return shop;
   }
 
-  // =============================================
-  // 3. QUẢN LÝ KHO HÀNG / ĐỊA CHỈ LẤY HÀNG (Stores)
-  // =============================================
+  // 4. QUAN LY KHO HANG / DIA CHI LAY HANG (Stores)
   async getMyStores(id_user: number) {
     const shop = await shopRepo.findShopByUserId(id_user);
     if (!shop) throw new Error('Không tìm thấy Shop.');
@@ -185,13 +160,53 @@ export class ShopService {
     return await shopRepo.getAllSpokes();
   }
 
+  async getSupportedAreas() {
+    const rows = await shopRepo.getSupportedAreas();
+    const provinceMap = new Map<string, {
+      name: string;
+      districts: Array<{
+        name: string;
+        id_area: number;
+        id_spoke: number;
+        spoke_name: string;
+        area_type: string | null;
+      }>;
+    }>();
+
+    for (const row of rows) {
+      const provinceName = String(row.province || '').trim();
+      const districtName = String(row.district || '').trim();
+
+      if (!provinceName || !districtName) continue;
+
+      if (!provinceMap.has(provinceName)) {
+        provinceMap.set(provinceName, { name: provinceName, districts: [] });
+      }
+
+      provinceMap.get(provinceName)!.districts.push({
+        name: districtName,
+        id_area: Number(row.id_area),
+        id_spoke: Number(row.id_spoke),
+        spoke_name: String(row.spoke_name || ''),
+        area_type: row.area_type || null,
+      });
+    }
+
+    return Array.from(provinceMap.values())
+      .map((province) => ({
+        ...province,
+        districts: province.districts.sort((a, b) => a.name.localeCompare(b.name, 'vi')),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  }
+
   async resolveDestinationArea(province: string, district: string) {
     if (!province || !district) {
-      throw new Error('Thiáº¿u thÃ´ng tin tá»‰nh/thÃ nh vÃ  quáº­n/huyá»‡n.');
+      throw new Error('Thiếu thông tin tỉnh/thành và quận/huyện.');
     }
 
     const area = await shopRepo.findAreaByProvinceDistrict(province, district);
-    if (!area) throw new Error(`ChÆ°a cáº¥u hÃ¬nh vÃ¹ng giao cho ${district}, ${province}.`);
+    if (!area) throw new Error(`Chưa cấu hình vùng giao cho ${district}, ${province}.`);
 
     return area;
   }
@@ -199,8 +214,10 @@ export class ShopService {
   async addStore(id_user: number, storeData: any) {
     const shop = await shopRepo.findShopByUserId(id_user);
     if (!shop) throw new Error('Không tìm thấy Shop.');
+
     const { store_name, phone, address, description } = storeData;
     if (!store_name || !phone || !address) throw new Error('Thiếu thông tin kho hàng.');
+
     const normalizedPhone = assertValidVietnamPhone(phone, 'SĐT liên hệ lấy hàng');
     const client = await shopRepo.getTxClient();
     try {
@@ -214,6 +231,7 @@ export class ShopService {
   async updateStore(id_user: number, id_store: number, storeData: any) {
     const shop = await shopRepo.findShopByUserId(id_user);
     if (!shop) throw new Error('Không tìm thấy Shop.');
+
     const { store_name, phone, address, description } = storeData;
     const normalizedPhone = assertValidVietnamPhone(phone, 'SĐT liên hệ lấy hàng');
     const updated = await shopRepo.updateStore(id_store, shop.id_shop, store_name, normalizedPhone, address, description);
@@ -224,14 +242,13 @@ export class ShopService {
   async deleteStore(id_user: number, id_store: number) {
     const shop = await shopRepo.findShopByUserId(id_user);
     if (!shop) throw new Error('Không tìm thấy Shop.');
+
     const deleted = await shopRepo.deleteStore(id_store, shop.id_shop);
     if (!deleted) throw new Error('Không tìm thấy kho hàng để xóa.');
     return { message: 'Đã xóa kho hàng thành công.' };
   }
 
-  // =============================================
-  // 4. QUẢN LÝ TÀI KHOẢN NGÂN HÀNG (Bank Accounts)
-  // =============================================
+  // 5. QUAN LY TAI KHOAN NGAN HANG (Bank Accounts)
   async getMyBanks(id_user: number) {
     return await shopRepo.getBanksByUserId(id_user);
   }
@@ -248,12 +265,11 @@ export class ShopService {
     return { message: 'Đã xóa tài khoản ngân hàng.' };
   }
 
-  // =============================================
-  // 5. VÍ TIỀN: Xem số dư & Nạp tiền
-  // =============================================
+  // 6. VI TIEN: Xem so du & Nap tien
   async getWallet(id_user: number) {
     const wallet = await shopRepo.getWalletByUserId(id_user);
     if (!wallet) throw new Error('Ví tiền không tồn tại.');
+
     const history = await shopRepo.getTransactionHistory(wallet.id_wallet);
     const available_balance = Number(wallet.available_balance || 0);
     const usedCredit = Number(wallet.used_credit || 0);
@@ -284,8 +300,7 @@ export class ShopService {
   async topupWallet(id_user: number, amount: number) {
     if (!amount || amount <= 0) throw new Error('Số tiền nạp phải lớn hơn 0.');
     if (amount > 100000000) throw new Error('Số tiền nạp tối đa mỗi lần là 100 triệu đồng.');
-    
-    // Yêu cầu thư viện payOS
+
     const { payOS, isPayOSConfigured } = require('../config/payos');
     if (!isPayOSConfigured) {
       throw new Error('Chua cau hinh PayOS. Can PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY trong webservice/.env.');
@@ -293,29 +308,29 @@ export class ShopService {
 
     const wallet = await shopRepo.getWalletByUserId(id_user);
     if (!wallet) throw new Error('Không tìm thấy ví tiền.');
-    
+
     const client = await shopRepo.getTxClient();
     try {
       await client.query('BEGIN');
-      
+
       const orderCode = Number(String(id_user).padStart(4, '0') + String(Date.now()).slice(-6));
       await shopRepo.createTopupTransaction(orderCode, id_user, amount, client);
-      
+
       const body = {
-        orderCode: orderCode,
-        amount: amount,
-        description: `Nap tien VI TMDT`,
-        returnUrl: "http://localhost:5173/wallet?topup=success",
-        cancelUrl: "http://localhost:5173/wallet?topup=cancelled"
+        orderCode,
+        amount,
+        description: 'Nap tien VI TMDT',
+        returnUrl: 'http://localhost:5173/wallet?topup=success',
+        cancelUrl: 'http://localhost:5173/wallet?topup=cancelled',
       };
-      
+
       const paymentLinkRes = await payOS.paymentRequests.create(body);
 
       await client.query('COMMIT');
-      return { 
-        message: 'Đã tạo link nạp tiền', 
-        checkoutUrl: paymentLinkRes.checkoutUrl, 
-        orderCode: orderCode 
+      return {
+        message: 'Đã tạo link nạp tiền',
+        checkoutUrl: paymentLinkRes.checkoutUrl,
+        orderCode,
       };
     } catch (error) {
       await client.query('ROLLBACK');
@@ -325,34 +340,30 @@ export class ShopService {
     }
   }
 
-  // Xử lý Webhook từ PayOS
+  // Xu ly Webhook tu PayOS
   async verifyPayosWebhook(webhookData: any) {
     const { payOS } = require('../config/payos');
-    
-    // Xác thực chữ ký webhook bằng config
+
     try {
-      if (webhookData.code === "00") {
-        // The library verifies the signature
+      if (webhookData.code === '00') {
         const verifiedData = await payOS.webhooks.verify(webhookData);
 
         if (verifiedData && verifiedData.amount > 0) {
           const client = await shopRepo.getTxClient();
           try {
             await client.query('BEGIN');
-            
-            // Đánh dấu giao dịch thành công (nếu PENDING)
+
             const transaction = await shopRepo.completeTopupTransaction(verifiedData.orderCode, client);
-            
+
             if (transaction) {
-               // Nạp tiền vào ví
-               const wallet = await shopRepo.getWalletByUserId(transaction.id_user);
-               if (wallet) {
-                 await shopRepo.topupWallet(wallet.id_wallet, transaction.amount, client);
-               }
+              const wallet = await shopRepo.getWalletByUserId(transaction.id_user);
+              if (wallet) {
+                await shopRepo.topupWallet(wallet.id_wallet, transaction.amount, client);
+              }
             }
-            
+
             await client.query('COMMIT');
-            return { message: "Webhook processed" };
+            return { message: 'Webhook processed' };
           } catch (error) {
             await client.query('ROLLBACK');
             throw error;
@@ -363,16 +374,16 @@ export class ShopService {
       }
     } catch (error: any) {
       console.error('PayOS Webhook verification failed', error);
-      throw error; // Let the caller know
+      throw error;
     }
-    return { message: "Ignored" };
+    return { message: 'Ignored' };
   }
 
   async withdrawWallet(id_user: number, amount: number, id_bank: number) {
     if (!amount || amount <= 5500) throw new Error('Số tiền rút phải lớn hơn phí dịch vụ (5,500đ).');
     const wallet = await shopRepo.getWalletByUserId(id_user);
     if (!wallet) throw new Error('Không tìm thấy ví tiền.');
-    
+
     if (Number(wallet.balance) < amount) {
       throw new Error(`Số dư không đủ. Bạn chỉ có ${Number(wallet.balance).toLocaleString()}đ.`);
     }
@@ -381,9 +392,11 @@ export class ShopService {
     try {
       await client.query('BEGIN');
       await shopRepo.withdrawWallet(wallet.id_wallet, amount, client);
-      // Giả lập lưu Yêu Cầu Rút vào một nơi nào đó nếu cần thiết (optional)
       await client.query('COMMIT');
-      return { message: `Đã gửi yêu cầu rút ${amount.toLocaleString()}đ thành công!`, new_balance: Number(wallet.balance) - amount };
+      return {
+        message: `Đã gửi yêu cầu rút ${amount.toLocaleString()}đ thành công!`,
+        new_balance: Number(wallet.balance) - amount,
+      };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -392,9 +405,7 @@ export class ShopService {
     }
   }
 
-  // =============================================
-  // 6. HỦY ĐƠN (Chỉ khi trạng thái = 'CHỜ LẤY HÀNG')
-  // =============================================
+  // 7. HUY DON (Chi khi trang thai = 'CHỜ LẤY HÀNG')
   async cancelOrder(id_user: number, id_order: number) {
     const shop = await shopRepo.findShopByUserId(id_user);
     if (!shop) throw new Error('Không tìm thấy thông tin Shop.');
@@ -402,15 +413,11 @@ export class ShopService {
     const order = await shopRepo.findOrderForCancellation(id_order, shop.id_shop);
     if (!order) throw new Error('Không tìm thấy đơn hàng hoặc đơn không thuộc Shop của bạn.');
 
-    // Ràng buộc từ Docx: Chỉ hủy khi Shipper CHƯA lấy hàng
     if (order.status !== 'CHỜ LẤY HÀNG') {
       throw new Error(`Không thể hủy đơn! Đơn đang ở trạng thái "${order.status}". Chỉ được hủy khi shipper chưa lấy hàng.`);
     }
 
     const wallet = await shopRepo.getWalletByUserId(id_user);
-
-    // Chỉ hoàn tiền vào ví nếu shop đã trả bằng ví (WALLET).
-    // Nếu fee_payment_method=CASH hoặc payer_type=RECEIVER thì shop chưa trừ ví → không hoàn.
     const shouldRefund =
       String(order.payer_type || 'SENDER').toUpperCase() === 'SENDER' &&
       String(order.fee_payment_method || 'WALLET').toUpperCase() === 'WALLET';
@@ -422,7 +429,6 @@ export class ShopService {
     try {
       await client.query('BEGIN');
       await shopRepo.cancelOrder(id_order, client);
-      // Hoàn tiền về ví chỉ khi đã trừ ví lúc tạo đơn
       if (wallet && refundAmount > 0) {
         await shopRepo.refundToWallet(wallet.id_wallet, refundAmount, client);
       }
@@ -430,7 +436,7 @@ export class ShopService {
       return {
         message: 'Hủy đơn thành công!',
         refunded: refundAmount,
-        note: refundAmount > 0 ? `Đã hoàn ${refundAmount.toLocaleString()}đ vào ví của bạn.` : ''
+        note: refundAmount > 0 ? `Đã hoàn ${refundAmount.toLocaleString()}đ vào ví của bạn.` : '',
       };
     } catch (error) {
       await client.query('ROLLBACK');
@@ -440,9 +446,7 @@ export class ShopService {
     }
   }
 
-  // =============================================
-  // 7. BÁO CÁO DÒNG TIỀN
-  // =============================================
+  // 8. BAO CAO DONG TIEN
   async getCashflowReport(id_user: number) {
     const report = await shopRepo.getCashflowReport(id_user);
     if (!report) throw new Error('Không tìm thấy dữ liệu tài chính.');

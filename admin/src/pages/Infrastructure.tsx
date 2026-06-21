@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   FiPlus, FiEdit2, FiServer, FiMapPin, FiMap, FiTrash2,
-  FiX, FiCheck, FiAlertCircle, FiLink, FiMinusCircle, FiInfo, FiSave
+  FiX, FiAlertCircle, FiLink, FiMinusCircle, FiInfo, FiSave
 } from 'react-icons/fi';
 import apiClient from '../api/client';
 import './Infrastructure.css';

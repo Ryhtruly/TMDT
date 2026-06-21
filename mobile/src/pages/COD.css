@@ -85,6 +85,81 @@
 .cod-order-name { font-size: 12px; color: var(--slate-600); font-weight: 500; margin-top: 2px; }
 .cod-order-amount { font-size: 14px; font-weight: 800; color: #2e7d32; white-space: nowrap; }
 
+.cod-receipt-list { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 8px; }
+.cod-receipt-card {
+  background: white;
+  border: 1px solid var(--slate-100);
+  border-radius: 16px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+  overflow: hidden;
+}
+.cod-receipt-head {
+  width: 100%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.cod-receipt-code { font-size: 13px; font-weight: 900; color: var(--slate-900); }
+.cod-receipt-time { font-size: 11px; color: var(--slate-400); margin-top: 4px; }
+.cod-receipt-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; color: var(--slate-900); }
+.cod-receipt-right strong { font-size: 14px; }
+.cod-receipt-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+.cod-receipt-status.pending { background: #fef3c7; color: #92400e; }
+.cod-receipt-status.confirmed { background: #dcfce7; color: #166534; }
+.cod-receipt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 14px 12px;
+  font-size: 11px;
+  color: var(--slate-500);
+}
+.cod-receipt-meta span {
+  background: #f8fafc;
+  border: 1px solid var(--slate-100);
+  border-radius: 999px;
+  padding: 5px 9px;
+}
+.cod-receipt-body {
+  border-top: 1px dashed var(--slate-200);
+  padding: 10px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cod-receipt-order {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+}
+.cod-receipt-note {
+  background: var(--info-bg);
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #1e40af;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 /* Sum row */
 .cod-sum-row {
   display: flex;
