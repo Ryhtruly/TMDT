@@ -1,0 +1,25 @@
+{
+  "name": "tmdt",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "install:all": "npm --prefix webservice install && npm --prefix client install && npm --prefix admin install && npm --prefix mobile install && npm --prefix stockkeeper install",
+    "dev:webservice": "npm --prefix webservice run dev",
+    "dev:client": "npm --prefix client run dev",
+    "dev:admin": "npm --prefix admin run dev",
+    "dev:mobile": "npm --prefix mobile run dev",
+    "dev:stockkeeper": "npm --prefix stockkeeper run dev",
+    "build:webservice": "npm --prefix webservice run build",
+    "build:client": "npm --prefix client run build",
+    "build:admin": "npm --prefix admin run build",
+    "build:mobile": "npm --prefix mobile run build",
+    "build:stockkeeper": "npm --prefix stockkeeper run build",
+    "build": "npm run build:webservice && npm run build:client && npm run build:admin && npm run build:mobile && npm run build:stockkeeper",
+    "test": "npm --prefix webservice test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
