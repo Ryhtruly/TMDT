@@ -168,12 +168,35 @@ export class StockkeeperService {
       throw new Error(`Don "${order.status}". Chi chap nhan: DA LAY HANG, DANG TRUNG CHUYEN, GIAO THAT BAI, TAI KHO, NHAP KHO`);
     }
 
-    // Verify warehouse is in route plan
+    // Verify warehouse is in route plan and follows sequential order
     const route = await routingService.resolveRoute(Number(order.id_store), Number(order.id_dest_area));
     const validLocationIds = Array.isArray(route?.nodes) ? route.nodes.map((n: any) => Number(n.id_location)) : [];
     
-    if (validLocationIds.length > 0 && !validLocationIds.includes(Number(idLocation))) {
-      throw new Error(`Kho ${warehouseName} khong thuoc tuyen duong cua don hang nay!`);
+    if (validLocationIds.length > 0) {
+      let expectedLocationId = null;
+      const isReturnFlow = !!order.is_return || orderStatusIn(order.status, [ORDER_STATUS.RETURNING, ORDER_STATUS.DELIVERY_FAILED]) || String(order.last_action || '').includes('HOAN');
+      const routeNodes = isReturnFlow ? [...validLocationIds].reverse() : validLocationIds;
+
+      if (orderStatusEquals(order.status, ORDER_STATUS.PICKED_UP) || orderStatusEquals(order.status, ORDER_STATUS.DELIVERY_FAILED)) {
+        expectedLocationId = routeNodes[0];
+      } else if (orderStatusEquals(order.status, ORDER_STATUS.AT_WAREHOUSE) || orderStatusEquals(order.status, ORDER_STATUS.INBOUND_WAREHOUSE)) {
+        expectedLocationId = Number(order.last_location_id);
+      } else {
+        const lastIdx = routeNodes.findIndex(id => id === Number(order.last_location_id));
+        if (lastIdx >= 0 && lastIdx + 1 < routeNodes.length) {
+          expectedLocationId = routeNodes[lastIdx + 1];
+        }
+      }
+
+      if (expectedLocationId && Number(idLocation) !== expectedLocationId) {
+        const expectedNode = route.nodes.find((n: any) => Number(n.id_location) === expectedLocationId);
+        const expectedName = expectedNode ? (expectedNode.location_name || expectedNode.name) : 'kho tuyến trước';
+        throw new Error(`Sai tuyen duong! Don nay phai duoc nhap tai "${expectedName}" truoc khi den kho nay.`);
+      }
+
+      if (!validLocationIds.includes(Number(idLocation))) {
+        throw new Error(`Kho ${warehouseName} khong thuoc tuyen duong cua don hang nay!`);
+      }
     }
 
     const client = await stockRepo.getTxClient();
