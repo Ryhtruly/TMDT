@@ -574,3 +574,46 @@
 .task-btn-accept:hover {
   background: #c2410c;
 }
+
+/* ================================================
+   LOCATION FILTER CHIPS
+   ================================================ */
+.tasks-location-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none; /* Hide scrollbar for Firefox */
+  -ms-overflow-style: none; /* Hide scrollbar for IE/Edge */
+}
+
+.tasks-location-row::-webkit-scrollbar {
+  display: none; /* Hide scrollbar for Chrome/Safari */
+}
+
+.tasks-location-chip {
+  padding: 6px 12px;
+  background: var(--slate-100);
+  border: 1.5px solid var(--slate-200);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--slate-600);
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.tasks-location-chip:hover {
+  background: var(--slate-200);
+  color: var(--slate-800);
+}
+
+.tasks-location-chip.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
