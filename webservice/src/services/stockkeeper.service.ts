@@ -160,8 +160,20 @@ export class StockkeeperService {
     const order = await stockRepo.findOrderByTracking(tracking_code);
     if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
 
+    if (order.id_service_type === 3) {
+      throw new Error(`Don giao hoa toc khong duoc phep nhap kho!`);
+    }
+
     if (!orderStatusIn(order.status, INBOUND_ALLOWED_STATUS_KEYS)) {
       throw new Error(`Don "${order.status}". Chi chap nhan: DA LAY HANG, DANG TRUNG CHUYEN, GIAO THAT BAI, TAI KHO, NHAP KHO`);
+    }
+
+    // Verify warehouse is in route plan
+    const route = await routingService.resolveRoute(Number(order.id_store), Number(order.id_dest_area));
+    const validLocationIds = Array.isArray(route?.nodes) ? route.nodes.map((n: any) => Number(n.id_location)) : [];
+    
+    if (validLocationIds.length > 0 && !validLocationIds.includes(Number(idLocation))) {
+      throw new Error(`Kho ${warehouseName} khong thuoc tuyen duong cua don hang nay!`);
     }
 
     const client = await stockRepo.getTxClient();
