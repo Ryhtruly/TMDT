@@ -380,11 +380,10 @@ export class ShipperService {
       if (!['ĐÃ LẤY HÀNG', 'GIAO THẤT BẠI'].includes(order.status)) {
         throw new Error(`Don dang o trang thai "${order.status}", khong the bat dau giao.`);
       }
-      const isSameDayOrder = order.id_service_type === 3;
-      if (order.status === 'ĐÃ LẤY HÀNG' && order.latest_action !== 'XUAT KHO -> GIAO CUOI' && !isSameDayOrder) {
+      if (order.status === 'ĐÃ LẤY HÀNG' && order.latest_action !== 'XUAT KHO -> GIAO CUOI') {
         throw new Error('Don chua duoc ban giao cho shipper giao cuoi chang.');
       }
-      if (!isSameDayOrder && Number(order.dest_spoke || 0) !== Number(assignment.id_spoke)) {
+      if (Number(order.dest_spoke || 0) !== Number(assignment.id_spoke)) {
         throw new Error('Don nay khong thuoc khu vuc giao hang cua ban.');
       }
       if (order.current_shipper_id && Number(order.current_shipper_id) !== Number(id_user)) {

@@ -263,31 +263,19 @@ export class ShipperRepository {
         ORDER BY ol.created_at DESC, ol.id_log DESC
         LIMIT 1
       ) latest_log ON TRUE
-      WHERE (
+      WHERE a.id_spoke = $1
+        AND (
           (
-            a.id_spoke = $1
-            AND o.status = ANY($3::text[])
+            o.status = ANY($3::text[])
             AND latest_log.action = 'XUAT KHO -> GIAO CUOI'
             AND (o.current_shipper_id IS NULL OR o.current_shipper_id = $2)
           )
           OR (
-            o.status = ANY($3::text[])
-            AND o.id_service_type = 3
-            AND o.current_shipper_id = $2
-          )
-          OR (
-            a.id_spoke = $1
-            AND o.status = ANY($4::text[])
-            AND o.current_shipper_id = $2
-          )
-          OR (
             o.status = ANY($4::text[])
-            AND o.id_service_type = 3
             AND o.current_shipper_id = $2
           )
           OR (
-            a.id_spoke = $1
-            AND o.status = ANY($5::text[])
+            o.status = ANY($5::text[])
             AND (o.current_shipper_id IS NULL OR o.current_shipper_id = $2)
           )
         )
