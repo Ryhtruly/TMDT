@@ -1,4 +1,4 @@
-﻿import { pool } from '../config/db';
+import { pool } from '../config/db';
 import { DELIVERY_ATTEMPT_RESULT, deliveryAttemptResultVariants } from '../utils/orderStatus';
 
 export class GeneralRepository {
@@ -300,7 +300,21 @@ export class GeneralRepository {
     return result.rows[0];
   }
 
-  async getAllFeedbacks() { return (await pool.query("SELECT f.*, u.phone, u.full_name FROM feedbacks f JOIN users u ON f.id_user = u.id_user ORDER BY f.id_feedback DESC")).rows; }
+  async getAllFeedbacks() {
+    return (
+      await pool.query(`
+        SELECT 
+          f.*, 
+          u.phone,
+          COALESCE(e.full_name, sh.shop_name, u.phone) AS full_name
+        FROM feedbacks f
+        JOIN users u ON f.id_user = u.id_user
+        LEFT JOIN employees e ON u.id_user = e.id_user
+        LEFT JOIN shops sh ON u.id_user = sh.id_user
+        ORDER BY f.id_feedback DESC
+      `)
+    ).rows;
+  }
 
   async getFeedbacksByUser(id_user: number) {
     return (await pool.query("SELECT * FROM feedbacks WHERE id_user = $1 ORDER BY id_feedback DESC", [id_user])).rows;

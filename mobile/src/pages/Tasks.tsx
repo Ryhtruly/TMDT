@@ -122,6 +122,7 @@ const Tasks = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterCod, setFilterCod] = useState(false);
+  const [selectedDistrict, setSelectedDistrict] = useState<string>('');
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -151,6 +152,7 @@ const Tasks = () => {
     setSearchParams({ tab: nextTab });
     setSearch('');
     setFilterCod(false);
+    setSelectedDistrict('');
   };
 
   const openMaps = (address: string) => {
@@ -212,49 +214,80 @@ const Tasks = () => {
     );
   };
 
+  const currentOrders = useMemo(() => {
+    return tab === 'pickup' ? pickups : tab === 'to-warehouse' ? toWarehouseOrders : deliveries;
+  }, [tab, pickups, toWarehouseOrders, deliveries]);
+
+  const uniqueDistricts = useMemo(() => {
+    const set = new Set<string>();
+    currentOrders.forEach((order) => {
+      if (order.district) {
+        set.add(order.district);
+      }
+    });
+    return Array.from(set).sort();
+  }, [currentOrders]);
+
   const filteredPickups = useMemo(() => {
     let list = pickups;
+    if (selectedDistrict) {
+      list = list.filter((order) => order.district === selectedDistrict);
+    }
     if (search) {
       const keyword = search.toLowerCase();
       list = list.filter(
         (order) =>
           order.tracking_code.toLowerCase().includes(keyword) ||
           order.receiver_name.toLowerCase().includes(keyword) ||
-          (order.store_name || '').toLowerCase().includes(keyword)
+          (order.store_name || '').toLowerCase().includes(keyword) ||
+          (order.pickup_address || '').toLowerCase().includes(keyword) ||
+          (order.receiver_address || '').toLowerCase().includes(keyword) ||
+          (order.district || '').toLowerCase().includes(keyword)
       );
     }
     if (filterCod) list = list.filter((order) => Number(order.cod_amount) > 0);
     return list;
-  }, [pickups, search, filterCod]);
+  }, [pickups, search, filterCod, selectedDistrict]);
 
   const filteredToWarehouse = useMemo(() => {
     let list = toWarehouseOrders;
+    if (selectedDistrict) {
+      list = list.filter((order) => order.district === selectedDistrict);
+    }
     if (search) {
       const keyword = search.toLowerCase();
       list = list.filter(
         (order) =>
           order.tracking_code.toLowerCase().includes(keyword) ||
           order.receiver_name.toLowerCase().includes(keyword) ||
-          (order.store_name || '').toLowerCase().includes(keyword)
+          (order.store_name || '').toLowerCase().includes(keyword) ||
+          (order.pickup_address || '').toLowerCase().includes(keyword) ||
+          (order.receiver_address || '').toLowerCase().includes(keyword) ||
+          (order.district || '').toLowerCase().includes(keyword)
       );
     }
     if (filterCod) list = list.filter((order) => Number(order.cod_amount) > 0);
     return list;
-  }, [toWarehouseOrders, search, filterCod]);
+  }, [toWarehouseOrders, search, filterCod, selectedDistrict]);
 
   const filteredDeliveries = useMemo(() => {
     let list = deliveries;
+    if (selectedDistrict) {
+      list = list.filter((order) => order.district === selectedDistrict);
+    }
     if (search) {
       const keyword = search.toLowerCase();
       list = list.filter(
         (order) =>
           order.tracking_code.toLowerCase().includes(keyword) ||
-          order.receiver_name.toLowerCase().includes(keyword)
+          order.receiver_name.toLowerCase().includes(keyword) ||
+          (order.receiver_address || '').toLowerCase().includes(keyword) ||
+          (order.district || '').toLowerCase().includes(keyword)
       );
     }
     if (filterCod) list = list.filter((order) => Number(order.cod_amount) > 0);
     return list;
-  }, [deliveries, search, filterCod]);
+  }, [deliveries, search, filterCod, selectedDistrict]);
 
   const inTransit = filteredDeliveries.filter((order) => statusIn(order.status, ['ĐÃ LẤY HÀNG', 'ĐANG GIAO']));
   const toRedeliver = filteredDeliveries.filter((order) => statusIs(order.status, 'GIAO THẤT BẠI'));
@@ -502,6 +535,29 @@ const Tasks = () => {
             COD
           </button>
         </div>
+
+        {uniqueDistricts.length > 0 && (
+          <div className="tasks-location-row">
+            <button
+              className={`tasks-location-chip${!selectedDistrict ? ' active' : ''}`}
+              onClick={() => setSelectedDistrict('')}
+            >
+              Tất cả ({currentOrders.length})
+            </button>
+            {uniqueDistricts.map((dist) => {
+              const count = currentOrders.filter((o) => o.district === dist).length;
+              return (
+                <button
+                  key={dist}
+                  className={`tasks-location-chip${selectedDistrict === dist ? ' active' : ''}`}
+                  onClick={() => setSelectedDistrict(dist)}
+                >
+                  {dist} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="tasks-content">

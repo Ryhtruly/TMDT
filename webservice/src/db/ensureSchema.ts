@@ -564,12 +564,30 @@ export const ensureSchema = async () => {
   await pool.query(`
     UPDATE cod_payouts
     SET status = 'DA_CHUYEN'
-    WHERE status IN ('ĐÃ CHUYỂN', 'ÄÃƒ CHUYá»‚N', 'Ã„ÂÃƒÆ’ CHUYÃ¡Â»â€šN');
+    WHERE status IN ('ĐÃ CHUYỂN', 'Ä Ãƒ CHUYá»‚N', 'Ã„Â ÃƒÆ’ CHUYÃ¡Â»â€šN');
   `);
 
   await pool.query(`
     UPDATE delivery_attempts
     SET result = 'THÀNH CÔNG'
-    WHERE result IN ('THÃ€NH CÃ”NG', 'THÃƒâ‚¬NH CÃƒâ€NG');
+    WHERE result IN ('THÃ€NH CÃ”NG', 'THÃƒâ‚¬NH CÃƒâ€ NG');
+  `);
+
+  await pool.query(`
+    UPDATE incidents
+    SET status = 'ĐANG ĐIỀU TRA'
+    WHERE status IN ('Ä ANG Ä Iá»€U TRA', 'ĐANG ĐIỀU TRA');
+  `);
+
+  await pool.query(`
+    UPDATE incidents
+    SET status = 'ĐÃ ĐỀN BÙ'
+    WHERE status IN ('Ä Ãƒ Ä á»€N BÃ™', 'ĐÃ ĐỀN BÙ');
+  `);
+
+  await pool.query(`
+    UPDATE feedbacks
+    SET status = 'MỚI'
+    WHERE status IN ('Má»šI', 'MỚI');
   `);
 };
