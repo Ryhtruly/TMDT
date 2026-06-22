@@ -420,8 +420,15 @@ export class ShipperService {
 
       const order = await shipperRepo.findOrderByTrackingForUpdate(tracking_code, client);
       if (!order) throw new Error(`Khong tim thay don: ${tracking_code}`);
-      if (order.status !== 'ĐANG GIAO') {
+      const isSameDayOrder = order.id_service_type === 3;
+      const allowedStatuses = isSameDayOrder ? ['ĐANG GIAO', 'ĐÃ LẤY HÀNG'] : ['ĐANG GIAO'];
+      if (!allowedStatuses.includes(order.status)) {
         throw new Error(`Khong the xac nhan giao thanh cong. Don dang o trang thai "${order.status}".`);
+      }
+      // P2P: auto-transition from ĐÃ LẤY HÀNG -> ĐANG GIAO within same tx
+      if (isSameDayOrder && order.status === 'ĐÃ LẤY HÀNG') {
+        await shipperRepo.updateOrderStatus(order.id_order, 'ĐANG GIAO', client);
+        await shipperRepo.insertOrderLog(order.id_order, idLocation, id_user, 'BAT DAU GIAO HANG (HOA TOC)', null, client);
       }
       if (Number(order.current_shipper_id || 0) !== Number(id_user)) {
         throw new Error('Don nay khong nam trong danh sach dang giao cua ban.');
